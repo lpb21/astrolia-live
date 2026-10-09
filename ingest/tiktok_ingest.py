@@ -1,4 +1,6 @@
 import os, logging, asyncio
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 import dataclasses
 import httpx
 from dotenv import load_dotenv
@@ -22,10 +24,23 @@ def dump(nombre, obj):
     log.info(f"[DUMP {nombre}] " + ", ".join(f"{k}={v!r}"[:80] for k, v in campos.items()))
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s",
-                    handlers=[logging.StreamHandler(), logging.FileHandler("ingest.log")])
+Path("logs").mkdir(exist_ok=True)
+_fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+
+_archivo = TimedRotatingFileHandler("logs/ingest.log", when="midnight", backupCount=7, encoding="utf-8")
+_archivo.setFormatter(_fmt)
+_consola = logging.StreamHandler()
+_consola.setFormatter(_fmt)
+logging.basicConfig(level=logging.INFO, handlers=[_consola, _archivo])
 log = logging.getLogger("ingest")
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+eventos_log = logging.getLogger("eventos")
+eventos_log.propagate = False          # no va a consola ni a ingest.log
+_ev = TimedRotatingFileHandler("logs/eventos.jsonl", when="midnight", backupCount=14, encoding="utf-8")
+_ev.setFormatter(logging.Formatter("%(message)s"))
+eventos_log.addHandler(_ev)
+eventos_log.setLevel(logging.INFO)
 
 
 _vistos: OrderedDict = OrderedDict()
@@ -80,7 +95,7 @@ def emit(ev: LiveEvent):
     if es_duplicado(ev.msg_id):
         log.debug(f"[DUP] {ev.msg_id} {ev.user}")
         return
-    log.info(ev.to_json())
+    eventos_log.info(ev.to_json())
     t = asyncio.get_running_loop().create_task(_enviar(ev))
     _tareas.add(t)
     t.add_done_callback(_tareas.discard)
