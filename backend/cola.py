@@ -8,10 +8,15 @@ NO_PREGUNTA = {"presente", "gracias", "hola", "buenas", "buenas noches",
                "ok", "si", "sí", "no", "yo", "amen", "amén"}
 
 
+CORTESIA = re.compile(r"^(ok|okay|gracias|muchas gracias|mil gracias|muchas bendiciones|"
+                      r"bendiciones|amen|amén|presente|hola)\b")
+
 def es_pregunta(texto: str) -> bool:
     t = texto.strip().lower()
     if len(t) < 8 or t in NO_PREGUNTA:
         return False
+    if CORTESIA.match(t) and "?" not in t and len(t.split()) <= 6:
+        return False    # "ok gracias por su respuesta", "gracias por tus palabras"
     return len(re.findall(r"[a-záéíóúñü]", t)) >= 6
 
 
@@ -24,6 +29,7 @@ class Item:
     regalos: list[str]
     ts: datetime                # cuándo quedó lista (pregunta + regalo)
     estado: str = "pendiente"   # pendiente | leyendo | hecho | saltado
+    extras: list[str] = field(default_factory=list)   # preguntas posteriores, máx 3
 
 
 @dataclass
@@ -54,7 +60,10 @@ class Cola:
     def _on_pregunta(self, user, nickname, texto, ts):
         item = self._items.get(user)
         if item and item.estado == "pendiente":
-            item.pregunta = texto
+            if not item.pregunta:
+                item.pregunta = texto        # era lectura general y llegó la pregunta
+            elif texto != item.pregunta and texto not in item.extras:
+                item.extras = (item.extras + [texto])[-3:]
             return
         r = self._regalos.get(user)
         if r and ts - r.ts <= self.ventana:

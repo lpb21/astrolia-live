@@ -53,3 +53,32 @@ def test_orden_por_valor_y_ts():
 def test_no_preguntas():
     for t in ["presente", "gracias", "🙏🏻🙏🏻", "yo", "Presente"]:
         assert not es_pregunta(t)
+        
+def test_gracias_no_borra_la_pregunta():          # julio.saavedra95
+    c = Cola()
+    c.procesar(ev("comment", "jul", 0, texto="me irá bien en el trabajo nuevo?"))
+    c.procesar(ev("gift", "jul", 1, regalo="Rose", valor=1))
+    c.procesar(ev("comment", "jul", 5, texto="ok gracias por su respuesta"))
+    [item] = c.pendientes(T0 + timedelta(seconds=6))
+    assert item.pregunta == "me irá bien en el trabajo nuevo?" and item.extras == []
+
+def test_reformulacion_va_a_extras():             # camilagaray231
+    c = Cola()
+    c.procesar(ev("comment", "cam", 0, texto="Mi papá me obligará a terminar con mi novio?"))
+    c.procesar(ev("gift", "cam", 1, regalo="Rose", valor=1))
+    c.procesar(ev("comment", "cam", 9, texto="Mi papá me dira que termine con mi novio"))
+    [item] = c.pendientes(T0 + timedelta(seconds=10))
+    assert "obligará" in item.pregunta and len(item.extras) == 1
+
+def test_lectura_general_recibe_pregunta_tardia():
+    c = Cola()
+    c.procesar(ev("gift", "ani", 0, regalo="White Rose", valor=1))
+    c.pendientes(T0 + timedelta(seconds=121))
+    c.procesar(ev("comment", "ani", 130, texto="péndulo me responde si o no"))
+    [item] = c.pendientes(T0 + timedelta(seconds=131))
+    assert item.pregunta == "péndulo me responde si o no"
+
+def test_cortesias_reales():
+    for t in ["ok gracias por su respuesta", "gracias por tus palabras ❤️", "muchas bendiciones"]:
+        assert not es_pregunta(t)
+    assert es_pregunta("hola soy rosita Jonathan me quiere como pareja y me ama enserio o no")
