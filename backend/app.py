@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import FastAPI
 from pydantic import BaseModel
 from backend.cola import Cola
+from backend.filtro import evaluar
 
 app = FastAPI(title="Astrolia Live")
 cola = Cola()
@@ -29,15 +30,21 @@ async def recibir(ev: EventoIn):
     cola.procesar(ev.model_dump())
 
 
+def _con_filtro(item) -> dict:
+    d = asdict(item)
+    d["filtro"] = asdict(evaluar(item.pregunta)) if item.pregunta else None
+    return d
+
+
 @app.get("/cola")
 async def ver_cola():
-    return [asdict(i) for i in cola.pendientes(ahora())]
+    return [_con_filtro(i) for i in cola.pendientes(ahora())]
 
 
 @app.post("/cola/siguiente")
 async def siguiente():
     item = cola.tomar_siguiente(ahora())
-    return asdict(item) if item else None
+    return _con_filtro(item) if item else None
 
 
 @app.post("/cola/{user}/cerrar")
