@@ -82,3 +82,28 @@ def test_cortesias_reales():
     for t in ["ok gracias por su respuesta", "gracias por tus palabras ❤️", "muchas bendiciones"]:
         assert not es_pregunta(t)
     assert es_pregunta("hola soy rosita Jonathan me quiere como pareja y me ama enserio o no")
+    
+def test_msg_id_repetido_no_suma_dos_veces():
+    c = Cola()
+    c.procesar(ev("comment", "r", 0, texto="me va a buscar este mes"))
+    g = ev("gift", "r", 1, regalo="Rose", valor=5)
+    g["msg_id"] = 123
+    c.procesar(g)
+    c.procesar(g)
+    [item] = c.pendientes(T0 + timedelta(seconds=2))
+    assert item.valor == 5
+
+def test_item_guarda_signo_de_la_pareja():
+    c = Cola()
+    c.procesar(ev("comment", "ana", 0, texto="Ana 05/05/90, Carlos 02/07/88, volveremos?"))
+    c.procesar(ev("gift", "ana", 1, regalo="Rose", valor=1))
+    [item] = c.pendientes(T0 + timedelta(seconds=2))
+    assert item.dato.signo == "Tauro" and item.pareja.signo == "Cáncer" and item.pareja.fecha is None
+
+def test_pareja_llega_despues():
+    c = Cola()
+    c.procesar(ev("comment", "ana", 0, texto="soy Ana 05/05/90 volveremos?"))
+    c.procesar(ev("gift", "ana", 1, regalo="Rose", valor=1))
+    c.procesar(ev("comment", "ana", 5, texto="mi ex es del 02/07/88"))
+    [item] = c.pendientes(T0 + timedelta(seconds=6))
+    assert item.dato.signo == "Tauro" and item.pareja.signo == "Cáncer"

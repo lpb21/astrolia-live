@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from astro.cielo import cielo
-from astro.signos import extraer
+from astro.signos import es_menor, extraer, extraer_pareja, relacion
 
 def test_sol_j2000():                      # Sol a ~280.4° el 1-ene-2000 12:00 UT
     c = cielo(datetime(2000, 1, 1, 12, tzinfo=timezone.utc))
@@ -46,3 +46,45 @@ def test_sin_dato():
     for t in ["Que le espera a alejandro en el 2027", "31 71 serguio seguirá con migo",
               "mi novio Jaciel me sigue queriendo?"]:
         assert extraer(t) is None, t
+        
+def test_dato_de_tercero_no_cuenta():
+    assert extraer("Mi ex Fernando 02/07/2002 volverá?") is None
+    assert extraer("mi novio es signo aries, me ama?") is None
+    assert extraer("soy Ana 05/05/90 y mi ex 02/07/2002 volverá?").signo == "Tauro"
+
+def test_dos_fechas_primera_propia_segunda_pareja():
+    t = "Ana 05/05/90, Carlos 02/07/88, volveremos?"
+    assert extraer(t).signo == "Tauro"
+    p = extraer_pareja(t)
+    assert p.signo == "Cáncer" and p.fecha is None          # de la pareja no se guarda la fecha
+    assert extraer_pareja("luz marina Gómez 19-02-74 Freddy armas mota 26-03-85").signo == "Aries"
+
+def test_fecha_tras_tercero_es_de_la_pareja():
+    t = "Mi ex Fernando 02/07/2002 volverá?"
+    assert extraer(t) is None and extraer_pareja(t).signo == "Cáncer"
+    t = "soy Ana 05/05/90 y mi ex 02/07/2002 volverá?"
+    assert extraer(t).signo == "Tauro" and extraer_pareja(t).signo == "Cáncer"
+
+def test_signo_de_la_pareja_por_nombre():
+    assert extraer_pareja("mi novio es signo aries, me ama?").signo == "Aries"
+    assert extraer_pareja("soy leo y él es cáncer, somos compatibles?").signo == "Cáncer"
+
+def test_una_sola_fecha_no_tiene_pareja():
+    for t in ["soy Ana 05/05/90 me va a buscar?", "soy aries leeme las cartas", "mi novio me quiere?"]:
+        assert extraer_pareja(t) is None, t
+
+def test_relacion_entre_signos():
+    assert relacion("Tauro", "Cáncer").startswith("sextil") and "tierra y agua" in relacion("Tauro", "Cáncer")
+    assert relacion("Aries", "Leo").startswith("trígono")
+    assert relacion("Aries", "Libra").startswith("oposición")
+    assert relacion("Piscis", "Aries") == relacion("Aries", "Piscis").replace("fuego y agua", "agua y fuego")
+
+
+def test_es_menor_por_fecha():
+    hoy = date(2026, 10, 9)
+    assert es_menor(extraer("soy Sofi 15/03/2010 me va a hablar?"), hoy)
+    assert es_menor(extraer("soy Sofi 10/10/2008 me va a hablar?"), hoy)        # cumple 18 mañana
+    assert not es_menor(extraer("soy Sofi 09/10/2008 me va a hablar?"), hoy)    # cumple 18 hoy
+    assert not es_menor(extraer("soy Ana 05/05/90 me va a buscar?"), hoy)
+    assert not es_menor(extraer("Carolina 3 de mayo tendré suerte?"), hoy)      # sin año no se sabe
+    assert not es_menor(None, hoy)

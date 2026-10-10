@@ -22,6 +22,8 @@ class LiveEvent:
 
 def limpiar(texto: str) -> str:
     t = unicodedata.normalize("NFKC", texto)   # 𝑒𝑛 𝑔𝑒𝑛𝑒𝑟𝑎𝑙 -> en general
-    t = re.sub(r"(.)\1{4,}", "", t)             # quita rellenos tipo 000000 o !!!!!!
-    t = re.sub(r"\[[a-zA-Z_]{2,20}\]", "", t)   # quita emotes de TikTok tipo [thanks]
-    return t.strip()
+    t = re.sub(r"\[[a-zA-Z_]{2,20}\]", "", t)   # emotes de TikTok tipo [thanks]
+    t = re.sub(r"(\d)\1{4,}", "", t)            # relleno numérico: 0000000 -> ""
+    t = re.sub(r"([^\W\d_])\1{2,}", r"\1", t)   # letras estiradas: hoooola -> hola
+    t = re.sub(r"([^\w\s])\1{2,}", r"\1", t)    # signos repetidos: ????? -> ?
+    return re.sub(r"\s{2,}", " ", t).strip()

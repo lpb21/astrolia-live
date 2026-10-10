@@ -1,7 +1,7 @@
 from __future__ import annotations
 import unicodedata
 from astro.cielo import Cielo
-from astro.signos import DatoSigno
+from astro.signos import DatoSigno, relacion
 from backend.cola import Item
 
 PLANETAS_CLAVE = ["Sol", "Luna", "Mercurio", "Venus", "Marte", "Júpiter", "Saturno"]
@@ -65,6 +65,23 @@ def _resumen_signo(dato: DatoSigno | None, c: Cielo) -> str:
     return "\n".join(lineas)
 
 
+def _resumen_pareja(dato: DatoSigno | None, pareja: DatoSigno | None, c: Cielo) -> str:
+    if pareja is None:
+        return ""
+    casas = c.casas_solares(pareja.signo)
+    lineas = [f"Signo solar de la otra persona: {pareja.signo}"]
+    if pareja.en_cuspide:
+        lineas.append("La otra persona nació en un día de cambio de signo: tómalo con cautela.")
+    if dato:
+        lineas.append(f"Relación entre los dos signos: {relacion(dato.signo, pareja.signo)}")
+    lineas.append(f"Para la otra persona: Venus en casa {casas['Venus']}, Marte en casa {casas['Marte']}")
+    return "\n" + "\n".join(lineas)
+
+
+SINASTRIA = (" Como hay datos de dos personas, cierra con una frase corta invitando a escribir al "
+             "mensaje interno si quiere la compatibilidad completa (sinastría).")
+
+
 def armar_prompt(item: Item, c: Cielo, dato: DatoSigno | None,
                  palabras: tuple[int, int] = (60, 90)) -> dict:
     ejemplos = "\n".join(f"Pregunta: {p}\nRespuesta: {r}" for p, r in EJEMPLOS)
@@ -77,9 +94,11 @@ def armar_prompt(item: Item, c: Cielo, dato: DatoSigno | None,
         extras = "\n<otras_preguntas>\n" + "\n".join(_limpio(e, 200) for e in item.extras) + "\n</otras_preguntas>"
 
     contenido = (
-        f"<contexto_astrologico>\n{_resumen_cielo(c)}\n{_resumen_signo(dato, c)}\n</contexto_astrologico>\n\n"
+        f"<contexto_astrologico>\n{_resumen_cielo(c)}\n{_resumen_signo(dato, c)}"
+        f"{_resumen_pareja(dato, item.pareja, c)}\n</contexto_astrologico>\n\n"
         f"<persona>{_limpio(item.nickname, 30)}</persona>\n"
         f"<pregunta>{pregunta}</pregunta>{extras}\n\n"
         f"Responde entre {palabras[0]} y {palabras[1]} palabras, solo con el JSON."
+        + (SINASTRIA if item.pareja else "")
     )
     return {"system": sistema, "messages": [{"role": "user", "content": contenido}]}

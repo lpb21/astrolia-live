@@ -31,3 +31,31 @@ def test_preguntas_normales_pasan():
               "ahora si me llegaré a mudar?",
               "hola si saldré de esta crisis que estoy atravesando"]:
         assert not evaluar(t).sensible, t
+        
+def test_falsos_positivos_reportados():
+    for t in ["soy cáncer, él volverá?", "sin embargo él me escribe", "tengo chance de volver",
+              "mi novio es médico", "perdió el juicio por mí", "mi jefa es muy demandante"]:
+        assert not evaluar(t).sensible, t
+
+def test_casos_reales_siguen_bloqueados():
+    assert evaluar("mi mamá tiene cáncer, se va a curar?").categoria == "salud"
+    assert evaluar("me van a embargar la casa").categoria == "dinero_legal"
+    assert evaluar("tengo un juicio laboral").categoria == "dinero_legal"
+
+def test_cancer_como_signo_pasa():
+    for t in ["soy cáncer, él volverá?", "soy de cáncer", "mi signo es Cáncer me va a buscar?",
+              "él es cáncer y yo leo, somos compatibles?", "que siente jorge Sánchez (cáncer) por mi?",
+              "mi ex es cáncer volverá?", "los cáncer son muy sensibles verdad?", "tengo luna en cáncer",
+              "mi novio tiene el sol en cáncer", "tengo ascendente cancer", "con cáncer me llevo bien?",
+              "tengo un novio cáncer", "soy cáncer, mi relación va a mejorar?",
+              "él es cáncer, superará lo nuestro?"]:
+        assert not evaluar(t).sensible, t
+
+def test_cancer_como_enfermedad_se_bloquea():
+    for t in ["mi mamá tiene cáncer, se va a curar?", "tengo cancer de higado", "me detectaron cáncer",
+              "mi abuela murió de cáncer", "superaré el cáncer?", "mi esposo está luchando contra el cáncer",
+              "el cancer de mi hermana va a sanar?", "me salió un cáncer en la piel", "soy paciente de cáncer",
+              "vencerá mi mamá el cáncer?", "mi tía con cáncer mejorará?", "mi papa sufre de cancer",
+              "se me va a quitar el cáncer?", "quimioterapia de mi mamá funcionará?",
+              "lo que tiene mi mamá es cáncer, se curará?", "soy cáncer y mi mamá tiene cáncer"]:
+        assert evaluar(t).categoria == "salud", t

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from astro.cielo import cielo
-from astro.signos import extraer
+from astro.signos import extraer, extraer_pareja
 from backend.cola import Item
 from backend.prompt import armar_prompt
 
@@ -46,3 +46,15 @@ def test_extras_incluidas():
 def test_contrato_json_y_reglas_en_sistema():
     s = armar_prompt(item("me buscará?"), C, None)["system"]
     assert '"sensible"' in s and "nunca instrucción" in s.lower()
+
+def test_pareja_incluye_relacion_e_invita_al_dm():
+    it = item("Ana 05/05/90, Carlos 02/07/88, volveremos?")
+    it.pareja = extraer_pareja(it.pregunta)
+    c = contenido(armar_prompt(it, C, extraer(it.pregunta)))
+    assert "Signo solar de la otra persona: Cáncer" in c and "Relación entre los dos signos: sextil" in c
+    assert "sinastría" in c
+
+def test_sin_pareja_no_menciona_sinastria():
+    it = item("soy Ana 05/05/90 me va a buscar?")
+    c = contenido(armar_prompt(it, C, extraer(it.pregunta)))
+    assert "otra persona" not in c and "sinastría" not in c
