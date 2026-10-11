@@ -1,12 +1,12 @@
 import os, logging, asyncio
-from logging.handlers import TimedRotatingFileHandler
+from datetime import datetime
 from pathlib import Path
 import dataclasses
 import httpx
 from dotenv import load_dotenv
 from TikTokLive import TikTokLiveClient
 from TikTokLive.client.web.web_settings import WebDefaults
-from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, GiftEvent, FollowEvent
+from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, GiftEvent, FollowEvent, LikeEvent, JoinEvent
 from TikTokLive.client.errors import UserOfflineError
 from ingest.normalize import LiveEvent, limpiar
 from collections import OrderedDict
@@ -27,7 +27,9 @@ load_dotenv()
 Path("logs").mkdir(exist_ok=True)
 _fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 
-_archivo = TimedRotatingFileHandler("logs/ingest.log", when="midnight", backupCount=7, encoding="utf-8")
+# Un par de archivos por arranque, con fecha, hora y cuenta: cada live queda en los suyos
+_SESION = f"logs/{datetime.now():%Y-%m-%d_%H-%M-%S}_{os.getenv('TIKTOK_USER') or 'live'}"
+_archivo = logging.FileHandler(f"{_SESION}_ingest.log", encoding="utf-8")
 _archivo.setFormatter(_fmt)
 _consola = logging.StreamHandler()
 _consola.setFormatter(_fmt)
@@ -37,7 +39,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 eventos_log = logging.getLogger("eventos")
 eventos_log.propagate = False          # no va a consola ni a ingest.log
-_ev = TimedRotatingFileHandler("logs/eventos.jsonl", when="midnight", backupCount=14, encoding="utf-8")
+_ev = logging.FileHandler(f"{_SESION}_eventos.jsonl", encoding="utf-8")
 _ev.setFormatter(logging.Formatter("%(message)s"))
 eventos_log.addHandler(_ev)
 eventos_log.setLevel(logging.INFO)
@@ -108,8 +110,10 @@ async def on_disconnect(e): log.warning("Desconectado")
 
 @client.on(CommentEvent)
 async def on_comment(e: CommentEvent):
+    identidad = getattr(e, "user_identity", None)
     emit(LiveEvent("comment", e.user.display_id, e.user.nickname,
-                   texto=limpiar(e.content), msg_id=e.common.msg_id))
+                   texto=limpiar(e.content), msg_id=e.common.msg_id,
+                   seguidor=bool(identidad.is_follower_of_anchor) if identidad is not None else None))
 
 @client.on(GiftEvent)
 async def on_gift(e: GiftEvent):
@@ -119,6 +123,14 @@ async def on_gift(e: GiftEvent):
         return
     emit(LiveEvent("gift", e.user.display_id, e.user.nickname,
                    regalo=e.gift.name, valor=e.gift.diamond_count * e.repeat_count, msg_id=e.common.msg_id))
+
+@client.on(LikeEvent)
+async def on_like(e: LikeEvent):
+    emit(LiveEvent("like", e.user.display_id, e.user.nickname, valor=e.count, msg_id=e.common.msg_id))
+
+@client.on(JoinEvent)
+async def on_join(e: JoinEvent):
+    emit(LiveEvent("join", e.user.display_id, e.user.nickname, msg_id=e.common.msg_id))
 
 @client.on(FollowEvent)
 async def on_follow(e: FollowEvent):

@@ -4,14 +4,15 @@ import json, re, unicodedata
 
 @dataclass
 class LiveEvent:
-    tipo: str            # "gift" | "comment" | "follow"
+    tipo: str            # "gift" | "comment" | "follow" | "like" | "join"
     user: str            # unique_id
     nickname: str
     texto: str = ""
     regalo: str = ""
-    valor: int = 0       # diamantes totales (diamond_count * repeat_count)
+    valor: int = 0       # gift: diamantes totales (diamond_count * repeat_count); like: toques del evento
     ts: str = ""
     msg_id: int = 0
+    seguidor: bool | None = None   # solo en comentarios: si sigue la cuenta (el backend no lo usa todavía)
     
     def __post_init__(self):
         self.ts = self.ts or datetime.now(timezone.utc).isoformat()

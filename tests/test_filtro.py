@@ -59,3 +59,32 @@ def test_cancer_como_enfermedad_se_bloquea():
               "se me va a quitar el cáncer?", "quimioterapia de mi mamá funcionará?",
               "lo que tiene mi mamá es cáncer, se curará?", "soy cáncer y mi mamá tiene cáncer"]:
         assert evaluar(t).categoria == "salud", t
+
+
+def test_casos_de_los_logs_de_octubre():
+    casos = {
+        "Isabel maria quiero saber si tengo asma  o disnea o otra cosa": "salud",
+        "por que me vine dolores en la espalda de la nada?": "salud",
+        "mi salud cualquier regslo": "salud",
+        "mi hija será mamá de una nena o varón?": "embarazo",
+        "MI HIJO BRAYAN CORRE PELIGRO": "violencia",
+        "me pasó algo me quitaron un dinero quiero saber quién fue": "acusacion",
+        "unas mujeres estan regando rumores de mi familia, como saber quienes son": "acusacion",
+        "Mauricio Dávila le irá bien en su tema legal?": "dinero_legal",
+        "Paqui irá bien ir con mamá al notario el 15 octubre?": "dinero_legal",
+    }
+    for texto, categoria in casos.items():
+        assert evaluar(texto).categoria == categoria, texto
+
+def test_profesor_de_musica_no_es_menor():
+    assert not evaluar("que siente jorge Sánchez (cáncer) por mi?. Es mi profesor de bajo (instrumento 🎸)").sensible
+    for t in ["quien me ama de verdad?", "quiero saber quien es el amor de mi vida", "mi economía mejorará", "voy a poder salir de mis deudas", "me llegará un dinero que espero",
+              "Pilar rivas me darán la paga de viuda Gracias", "cobrare el salario de mis hijas?",
+              "es legalmente mi esposo, volverá?"]:
+        assert not evaluar(t).sensible, t
+
+
+def test_preocupacion_por_un_familiar_no_se_bloquea():      # Lalita Vergara
+    for t in ["Hola soy Laura vergara, que va a suceder ahora con el papá de mis hijos? Miller Wilches",
+              "Miller Wilches está en malos pasos ?"]:
+        assert not evaluar(t).sensible, t

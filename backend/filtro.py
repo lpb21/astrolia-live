@@ -11,6 +11,7 @@ ACCIONES = {
     "violencia": "mensaje_fijo",
     "brujeria": "saltar",
     "dinero_legal": "saltar",
+    "acusacion": "saltar",
 }
 
 MENSAJES = {
@@ -26,16 +27,20 @@ MENSAJES = {
 PATRONES: list[tuple[str, re.Pattern]] = [
     ("crisis", re.compile(r"suicid|matarme|quitarme la vida|no quiero vivir|hacerme dano|cortarme|morirme")),
     ("salud", re.compile(r"desma[yl]|corazon (le |me )?late|enferm|hospital|sintoma|diagnost|"
-                         r"cirugia|convulsi|tumor|dolor de|quimio|radioterapia|metastasis")),
-    ("embarazo", re.compile(r"embaraz|aborto|aborta")),
-    ("violencia", re.compile(r"me pega|me golpea|maltrat|abus|me amenaza|violencia")),
+                         r"cirugia|convulsi|tumor|dolor(es)? (de|en)\b|me duele|quimio|radioterapia|metastasis|"
+                         r"\bmi salud\b|\bde salud\b|\basma\b|disnea|diabet|infarto")),
+    ("embarazo", re.compile(r"embaraz|aborto|aborta|sera (mama|papa)\b|nena o varon|varon o (nena|nina)|nino o nina")),
+    ("violencia", re.compile(r"me pega|me golpea|maltrat|abus|me amenaza|violencia|corre peligro|en peligro\b")),
     ("menor", re.compile(r"\btengo 1[0-7] anos|\bmi (papa|mama|papi|mami) (me|no me)|colegio|"
-                         r"profesora?\b|\bgrado\b|mis papas")),
+                         r"\bgrado\b|mis papas")),
     ("brujeria", re.compile(r"brujeria|hechizo|amarre|le hizo (un )?trabajo|me hicieron (un )?trabajo|"
                             r"le hicieron (un )?trabajo|endulzamiento")),
-    ("dinero_legal", re.compile(r"herencia|\bdemanda\b|\bdemandar|"
+    # Señalar a una persona como culpable de un robo o un chisme no lo deciden las cartas
+    ("acusacion", re.compile(r"quien (fue|me robo|me lo robo|lo hizo|me hizo)|quienes? (son|fueron)\b|"
+                             r"me robaron|me robo\b|me quitaron (un |el |mi |la |una )?(dinero|plata|celular|cartera)")),
+    ("dinero_legal", re.compile(r"\blegal(es)?\b|notari|herencia|\bdemanda\b|\bdemandar|"
                                 r"(?<!perdio el )(?<!perdi el )(?<!pierde el )\bjuicio\b|"
-                                r"abogad|loteria|invertir|inversion|deuda|(?<!sin )\bembarg|divorcio")),
+                                r"abogad|loteria|invertir|inversion|(?<!sin )\bembarg|divorcio")),
 ]
 
 # "cáncer" es signo o enfermedad según lo que lo rodea; se decide por cada aparición

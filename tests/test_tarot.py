@@ -59,5 +59,14 @@ def test_prompt_lleva_la_tirada_y_el_largo_crece():
     assert c.index("<tirada>") < c.index("<contexto_astrologico>")
     for t in it.cartas:
         assert f"{t.posicion.capitalize()}: {t.carta.nombre}" in c
-    assert "entre 115 y 135 palabras" in c and "Entre 115 y 135 palabras" in p["system"]
+    assert "entre 130 y 150 palabras" in c and "Entre 130 y 150 palabras" in p["system"]      # 4 cartas + gracias
     assert palabras_para(1) == (40, 60) and palabras_para(6)[0] > palabras_para(3)[1]
+    
+def test_cada_carta_tiene_imagen():
+    import pytest
+    from pathlib import Path
+    carpeta = Path(__file__).resolve().parent.parent / "tarot" / "img"
+    if not carpeta.exists():
+        pytest.skip("sin imágenes; corre python -m tools.descargar_cartas")
+    faltan = [c.id for c in MAZO if not (carpeta / f"{c.id}.jpg").exists()]
+    assert faltan == [], f"cartas sin imagen: {faltan}"

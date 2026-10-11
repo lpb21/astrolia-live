@@ -88,3 +88,92 @@ def test_es_menor_por_fecha():
     assert not es_menor(extraer("soy Ana 05/05/90 me va a buscar?"), hoy)
     assert not es_menor(extraer("Carolina 3 de mayo tendré suerte?"), hoy)      # sin año no se sabe
     assert not es_menor(None, hoy)
+
+
+def test_fechas_escritas_de_corrido():            # logs del 11 de octubre
+    from astro.signos import sin_fechas
+    casos = {
+        "wendy cEniceros 05 0489 quiero saber si veré mañana a Jaime": ("Aries", 1989),
+        "Lesly tapia 08112007 quiero saber q quiere Stiven conmigo": ("Escorpio", 2007),
+        "Isabel maria 3_8_1988 quiero saber algo": ("Leo", 1988),
+        "soy Ana 050590 me va a buscar?": ("Tauro", 1990),
+    }
+    for texto, (signo, anio) in casos.items():
+        d = extraer(texto)
+        assert d and d.signo == signo and d.fecha.year == anio, texto
+    assert extraer("mi número es 3001234567 me va a llamar?") is None
+    assert extraer("ya van 20000 likes, me va a leer?") is None
+    assert sin_fechas("Lesly 08112007 quiero saber") == "Lesly quiero saber"
+    assert sin_fechas("wendy 05 0489 y Ana 3/8/83 hola") == "wendy y Ana hola"
+
+def test_fecha_con_mes_sin_de():
+    d = extraer("Yudith 15 octubre 92. quiero saber si esa persona seguirá buscándome")
+    assert d.signo == "Libra" and d.fecha.year == 1992
+    assert extraer("nos vemos este sábado 10 octubre, irá?") is None
+
+def test_fecha_con_apostrofos():                   # log del 11 de octubre
+    from astro.signos import sin_fechas
+    for t in ["30'06'2008 Puedes decirme como pasarán las cosas con Julian",
+              "30'06'08 Puedes decirme como pasarán las cosas con Julian",
+              "30'06'08Puedes decirme como pasarán las cosas con Julian", "30’06’08 qué pasará con Julian?"]:
+        d = extraer(t)
+        assert d and d.signo == "Cáncer" and d.fecha.year == 2008, t
+        assert "30" not in sin_fechas(t) and "Julian" in sin_fechas(t), t
+    assert extraer("tengo 3 hijos, 2 perros y 15 años de casada, me dejará?") is None
+
+def test_fecha_incompleta():                       # Shirley, log del 11 de octubre
+    from astro.signos import fecha_incompleta
+    anio = ["Hola buen día Shirley del 2002 me irá bien en esta relación con bryan del 99 🇪🇸",
+            "soy del 85", "Soy yulis del 85 Camilo volverá conmigo", "nací en 1990", "del año 2001"]
+    mes = ["soy de junio", "nací en marzo", "junio del 2002", "de mayo", "cumplo en octubre, me buscará?"]
+    nada = ["me va a buscar este mes?", "nos vemos en mayo, irá?", "tengo 35 años, volverá?", "soy Ana 05/05/90",
+            "3 de mayo", "soy tauro", "mi ex es del 99", "ya van 80 likes", "volverá en el 2027?"]
+    for t in anio: assert fecha_incompleta(t) == "anio", t
+    for t in mes: assert fecha_incompleta(t) == "mes", t
+    for t in nada: assert fecha_incompleta(t) is None, t
+
+
+# ---------- ¿de quién es la fecha? (Fernando Salazar, log del 11 de octubre) ----------
+def test_fecha_junto_al_nombre_de_la_otra_persona():
+    from astro.signos import repartir
+    for t in ["cómo se ven las cosas entre Carmen Rodríguez 12-10-93 y Fernando Salazar",
+              "cómo se ven las cosas entre Carmen 12-10-93 Rodríguez y Fernando slaazar"]:
+        r = repartir(t, "FERNANDO SALAZAR", "fernando.salazar7080")
+        assert r.propio is None and r.pareja.signo == "Libra" and r.pareja.fecha is None and r.de_pareja, t
+
+def test_dos_fechas_se_reparten_por_el_nombre_de_la_cuenta():
+    from astro.signos import repartir
+    r = repartir("hola Cristian García 11/10/1999 y Luisa Hernández 23/12/2000 vamos arreglar las cosas",
+                 "Fernanda 🌹😍❤️", "luisafernanda7467")
+    assert r.propio.signo == "Capricornio" and r.pareja.signo == "Libra"
+    r = repartir("Sebastiano 05 12 93 està triste por mi Fabiola 29 12 74?", "Fabiola la guerrera", "fabiolasallemi35")
+    assert r.propio.fecha.year == 1974 and r.pareja.signo == "Sagitario"
+    r = repartir("Ismael bravo Río 31 8 80 y ana nieves monago Benítez 30 7 91 volvera a ser pareja", "Ismael", "isma")
+    assert r.propio.signo == "Virgo" and r.pareja.signo == "Leo"
+
+def test_fecha_dudosa_cuando_la_cuenta_no_ayuda():
+    from astro.signos import repartir
+    for t in ["cómo se ven las cosas entre Carmen Rodríguez 12-10-93 y Fernando Salazar",
+              "quiero saber si Juan y Ana 05/05/90 van a volver"]:
+        r = repartir(t, "abc", "abc88.8")
+        assert r.propio is None and r.dudosa is not None and not r.de_pareja, t
+
+def test_fecha_propia_en_los_casos_de_siempre():
+    from astro.signos import repartir
+    casos = [("Soy Ana 05/05/90 y Juan me quiere?", "abc"), ("Ana 05/05/90 y Juan vamos a volver?", "mgc"),
+             ("Hola! Brenda Sotelo 09/06/95, Noelia tiene problemas con verme bien en mi matrimonio?", "Bren♡"),
+             ("JeannetteHijerra 12 4 69 tengo futuro con Manuel Sandoval?", "Janet Hijerra"),
+             ("Carlos 21/07/92 edilmary está esperando que le demuestre todo para volver conmigo?", "Carlos Arango"),
+             ("wendy cEniceros 05 0489 quiero saber si veré mañana a Jaime Alday", "mgc")]
+    for t, cuenta in casos:
+        r = repartir(t, cuenta, "x")
+        assert r.propio is not None and r.dudosa is None and not r.de_pareja, t
+
+def test_respuesta_a_la_duda():
+    from astro.signos import respuesta_duda
+    for t in ["mía", "es mía", "la mía", "Mia 🙏", "mi fecha", "sí, la mía", "es la mia"]:
+        assert respuesta_duda(t) == "propia", t
+    for t in ["de él", "de ella", "suya", "es de Carmen", "no es mía", "de mi pareja", "de mi ex"]:
+        assert respuesta_duda(t) == "pareja", t
+    for t in ["me va a buscar este mes?", "hola", "gracias", "quiero saber si Carmen vuelve conmigo y cuándo será"]:
+        assert respuesta_duda(t) is None, t

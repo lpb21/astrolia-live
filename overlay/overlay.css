@@ -1,0 +1,162 @@
+/* PROVISIONAL: colores y tipografías hasta que Caro cierre la identidad visual del live. */
+:root {
+  --noche: 22 14 48;                /* fondo de los paneles */
+  --oro: #ecc878;
+  --oro-suave: rgb(236 200 120 / .45);
+  --lila: #cdbcff;
+  --crema: #f7f0e2;
+  --titulos: "Cinzel", "Trajan Pro", Georgia, serif;
+  --texto: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+
+  /* Zona libre de la interfaz de TikTok (arriba: perfil y clasificación; abajo: chat). */
+  --arriba: 335px;
+  --abajo: 585px;
+  --margen: 26px;
+  --columna: 296px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: transparent; }
+body.fondo { background: radial-gradient(120% 80% at 50% 35%, #4a2f7a 0%, #1b1036 55%, #0b0618 100%); }
+
+#lienzo {
+  position: absolute; left: 50%; top: 0;
+  width: 1080px; height: 1920px;
+  transform-origin: top center;
+  transform: translateX(-50%) scale(var(--escala, 1));
+  font-family: var(--texto); color: var(--crema);
+  font-size: 26px; line-height: 1.25;
+}
+
+[hidden] { display: none !important; }
+ol, ul { list-style: none; }
+
+.panel {
+  background: linear-gradient(160deg, rgb(var(--noche) / .86), rgb(var(--noche) / .72));
+  border: 2px solid var(--oro-suave);
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / .45), inset 0 0 0 1px rgb(255 255 255 / .05);
+}
+
+h2 {
+  font: 700 23px/1 var(--titulos); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--oro); padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--oro-suave);
+}
+h2 span { color: var(--lila); letter-spacing: 0; }
+
+/* ---------- turnos (izquierda) ---------- */
+#turnos { position: absolute; left: var(--margen); top: var(--arriba); width: var(--columna); }
+#turnos-lista { padding: 8px 14px 6px; counter-reset: turno; }
+#turnos-lista li {
+  counter-increment: turno;
+  display: grid; grid-template-columns: 34px 1fr; align-items: baseline;
+  padding: 7px 0; animation: entra .35s ease-out both;
+}
+#turnos-lista li::before { content: counter(turno); font: 700 22px var(--titulos); color: var(--oro); }
+.turno-nombre { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.turno-detalle { grid-column: 2; font-size: 20px; color: var(--lila); white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; }
+.turno-detalle.falta { color: #ffd9a0; font-style: italic; }
+#turnos-mas { padding: 2px 18px 14px 48px; font-size: 21px; color: var(--lila); }
+
+/* ---------- menú (derecha) ---------- */
+#menu { position: absolute; right: var(--margen); top: var(--arriba); width: var(--columna); }
+#menu-lista { padding: 8px 12px 10px; }
+#menu-lista li { display: grid; grid-template-columns: 82px 1fr; gap: 10px; align-items: center; padding: 4px 0; }
+.monedas {
+  font-weight: 800; font-size: 21px; text-align: center; color: #2a1a05;
+  background: linear-gradient(180deg, #ffe7a8, #e0a93c); border-radius: 999px; padding: 5px 0;
+}
+.monedas.gratis { background: linear-gradient(180deg, #e4d9ff, #a98df0); color: #1c0f3d; }
+.menu-nombre { font-weight: 700; font-size: 23px; line-height: 1.15; }
+
+/* ---------- boost de likes (arriba al centro, solo mientras corre la ronda) ---------- */
+#boost {
+  position: absolute; top: var(--arriba); left: calc(var(--margen) + var(--columna) + 14px);
+  right: calc(var(--margen) + var(--columna) + 14px); text-align: center;
+  border-color: #ff8fb8; box-shadow: 0 0 28px rgb(255 110 170 / .55), 0 10px 30px rgb(0 0 0 / .45);
+  animation: entra .4s ease-out both;
+}
+#boost h2 { color: #ffd0e2; border-color: rgb(255 143 184 / .45); font-size: 21px; letter-spacing: .08em; }
+#boost-reloj { display: block; margin-top: 8px; font: 800 54px/1 var(--texto); color: #fff; letter-spacing: 0; }
+#boost-regla { padding: 10px 14px 4px; font-size: 20px; color: var(--lila); text-wrap: balance; }
+#boost-top { padding: 4px 16px 12px; counter-reset: puesto; }
+#boost-top li { counter-increment: puesto; display: grid; grid-template-columns: 26px 1fr auto; gap: 6px;
+                align-items: baseline; padding: 4px 0; font-size: 23px; text-align: left; }
+#boost-top li::before { content: counter(puesto); font: 700 20px var(--titulos); color: var(--oro); }
+#boost-top li:first-child { font-weight: 800; color: #fff; }
+#boost-top .nombre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#boost-top .likes { color: #ff9ec2; font-weight: 800; white-space: nowrap; }
+.turno-detalle.pase { color: #ff9ec2; font-weight: 700; }
+
+/* ---------- lectura (centro, sobre el chat) ---------- */
+#lectura {
+  position: absolute; left: var(--margen); right: var(--margen); bottom: var(--abajo);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+
+#estado {
+  font: 700 25px/1 var(--titulos); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--oro); padding: 15px 34px; border-radius: 999px;
+  background: rgb(var(--noche) / .88); border: 2px solid var(--oro-suave);
+  box-shadow: 0 8px 22px rgb(0 0 0 / .45);
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#estado.espera::after { content: "…"; animation: late 1.6s ease-in-out infinite; }
+
+#cartas { display: flex; justify-content: center; gap: 14px; width: 100%; perspective: 1400px; }
+#cartas:empty { display: none; }
+.carta { --ancho: 190px;      /* 1 o 2 cartas caben entre los paneles; desde 3 pasan por debajo */ width: var(--ancho); flex: none; text-align: center;
+         animation: voltea .6s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i) * .22s); }
+#cartas[data-n="3"] .carta, #cartas[data-n="4"] .carta { --ancho: 155px; }
+#cartas[data-n="5"] .carta { --ancho: 150px; }
+#cartas[data-n="6"] .carta { --ancho: 140px; }
+#cartas[data-n="6"] .carta-posicion { font-size: 16px; padding: 4px 8px; }
+.carta-cara {
+  width: var(--ancho); aspect-ratio: 3 / 5; border-radius: 12px; overflow: hidden;
+  border: 3px solid var(--oro); box-shadow: 0 10px 24px rgb(0 0 0 / .55);
+  transition: transform .4s ease, box-shadow .4s ease;
+}
+.carta-cara img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.carta.activa .carta-cara { transform: translateY(-8px) scale(1.03);
+                            box-shadow: 0 0 0 3px #fff3cf, 0 0 34px 6px rgb(236 200 120 / .75); }
+/* Carta dibujada, cuando falta su imagen en tarot/img/ */
+.carta-cara.sin-imagen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10%;
+  padding: 8%;
+  background:
+    radial-gradient(circle at 50% 38%, rgb(205 188 255 / .35), transparent 55%),
+    linear-gradient(170deg, #3b2670, #170d33);
+  box-shadow: 0 10px 24px rgb(0 0 0 / .55), inset 0 0 0 5px #170d33, inset 0 0 0 7px var(--oro-suave);
+}
+.carta-simbolo { font-size: calc(var(--ancho) * .34); line-height: 1; color: var(--oro); }
+.carta-nombre { font: 700 calc(var(--ancho) * .115)/1.15 var(--titulos); letter-spacing: .04em;
+                text-transform: uppercase; text-wrap: balance; }
+.carta-posicion {
+  display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px;
+  font: 700 19px/1.1 var(--titulos); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--oro); background: rgb(var(--noche) / .88); white-space: nowrap;
+}
+.carta-pie { display: block; margin-top: 5px; font-size: calc(var(--ancho) * .115); font-weight: 700;
+             line-height: 1.1; text-shadow: 0 1px 4px #000, 0 0 8px #000; text-wrap: balance; }
+
+#voz { width: 100%; padding: 16px 28px 18px; text-align: center; animation: entra .4s ease-out both; }
+#voz-quien { font: 700 30px/1.15 var(--titulos); color: var(--oro); letter-spacing: .05em; }
+#voz-quien small { font: 600 21px var(--texto); color: var(--lila); letter-spacing: .02em; margin-left: 10px;
+                   white-space: nowrap; }
+#voz-pregunta { margin-top: 8px; font-size: 24px; font-style: italic; color: var(--lila); }
+#voz-texto { margin-top: 14px; font-size: 31px; font-weight: 600; line-height: 1.3; text-wrap: pretty;
+             min-height: 2.6em; }
+#voz-texto.cambia { animation: entra .3s ease-out both; }
+
+/* ---------- aviso legal ---------- */
+#aviso {
+  position: absolute; left: 60px; right: 60px; bottom: calc(var(--abajo) - 78px);
+  font-size: 17px; line-height: 1.3; text-align: center; color: rgb(247 240 226 / .85);
+  text-shadow: 0 1px 4px #000, 0 0 10px #000;
+}
+
+@keyframes entra { from { opacity: 0; transform: translateY(14px); } }
+@keyframes voltea { from { opacity: 0; transform: translateY(60px) rotateY(90deg); } }
+@keyframes late { 50% { opacity: .25; } }

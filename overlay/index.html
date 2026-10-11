@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Astrolia Live — overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Nunito+Sans:ital,opsz,wght@0,6..12,400..800;1,6..12,400..600&display=swap">
+<link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+<!-- Lienzo fijo de 1080×1920 que se escala a la ventana. Fondo transparente: la escena y el
+     avatar van detrás, en LIVE Studio. Parámetros: ?demo=1 (datos de muestra) y ?fondo=1. -->
+<main id="lienzo">
+  <section id="turnos" class="panel" hidden>
+    <h2>Turnos <span id="turnos-total"></span></h2>
+    <ol id="turnos-lista"></ol>
+    <p id="turnos-mas" hidden></p>
+  </section>
+
+  <section id="menu" class="panel" hidden>
+    <h2>Lecturas</h2>
+    <ul id="menu-lista"></ul>
+  </section>
+
+  <section id="boost" class="panel" hidden>
+    <h2>⚡ Boost de likes <span id="boost-reloj"></span></h2>
+    <p id="boost-regla">Quien más toque la pantalla pasa de primero</p>
+    <ol id="boost-top"></ol>
+  </section>
+
+  <section id="lectura">
+    <div id="cartas"></div>
+    <p id="estado"></p>
+    <div id="voz" class="panel" hidden>
+      <p id="voz-quien"></p>
+      <p id="voz-pregunta" hidden></p>
+      <p id="voz-texto"></p>
+    </div>
+  </section>
+
+  <!-- PROVISIONAL: Caro reemplaza este aviso por su texto legal. -->
+  <p id="aviso">Las lecturas son una guía de entretenimiento y crecimiento personal; no sustituyen asesoría
+    médica, psicológica, legal ni financiera. Respuestas generadas con IA.</p>
+</main>
+<script src="overlay.js"></script>
+</body>
+</html>

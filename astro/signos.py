@@ -15,8 +15,13 @@ GLIFOS = {"♈": "Aries", "♉": "Tauro", "♊": "Géminis", "♋": "Cáncer", "
           "♎": "Libra", "♏": "Escorpio", "♐": "Sagitario", "♑": "Capricornio", "♒": "Acuario",
           "♓": "Piscis"}
 
-FECHA_NUM = re.compile(r"\b(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{4}|\d{2})\b")   # DD/MM/AA
-FECHA_MES = re.compile(r"\b(\d{1,2})\s+de\s+(" + "|".join(MESES) + r")(?:\s+(?:de|del)\s+(\d{4}))?")
+# DD/MM/AA con los separadores que usa la gente en el chat, incluido el apóstrofo: 30'06'08.
+# El año puede venir pegado a la palabra siguiente ("30'06'08Puedes decirme").
+_SEP = r"\s*[/.\-_ '’´`]\s*"
+FECHA_NUM = re.compile(r"\b(\d{1,2})" + _SEP + r"(\d{1,2})" + _SEP + r"(\d{4}|\d{2})(?!\d)")
+# Fechas escritas de corrido, como llegan del chat: "08112007", "050489", "05 0489"
+FECHA_PEGADA = re.compile(r"\b(\d{2})(\d{2})((?:19|20)\d{2}|\d{2})\b|\b(\d{1,2})[/.\-_ ](\d{2})(\d{2})\b")
+FECHA_MES = re.compile(r"\b(\d{1,2})\s+(?:de\s+)?(" + "|".join(MESES) + r")\b(?:\s+(?:de\s+|del\s+)?(\d{4}|\d{2})\b)?")
 EVENTO = re.compile(r"(lunes|martes|miercoles|jueves|viernes|sabado|domingo|este|esta|"
                     r"proximo|para el|hasta el|el dia)\s*$")
 # "Leo" también es nombre de persona: el signo en texto solo cuenta con "soy" o "signo"
@@ -74,12 +79,25 @@ def es_menor(dato: DatoSigno | None, hoy: date) -> bool:
     return hoy.year - f.year - ((hoy.month, hoy.day) < (f.month, f.day)) < 18
 
 
+def _tapar(m: re.Match) -> str:
+    return " " * len(m.group(0))      # conserva las posiciones del texto
+
+
+def sin_fechas(texto: str) -> str:
+    """El texto sin fechas de nacimiento, para mostrarlo en pantalla o buscarle la pregunta."""
+    for patron in (FECHA_NUM, FECHA_PEGADA):
+        texto = patron.sub(" ", texto)
+    return " ".join(texto.split())
+
+
 def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
     """Fechas de nacimiento válidas del texto, con su posición, en orden de aparición."""
     hallados = []
-    for m in FECHA_NUM.finditer(t):
-        d, mes, a = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if len(m.group(3)) == 2:
+    numericas = [m.groups() + (m.start(),) for m in FECHA_NUM.finditer(t)]
+    numericas += [tuple(g for g in m.groups() if g) + (m.start(),) for m in FECHA_PEGADA.finditer(FECHA_NUM.sub(_tapar, t))]
+    for g1, g2, g3, pos in numericas:
+        d, mes, a = int(g1), int(g2), int(g3)
+        if len(g3) == 2:
             a = _siglo(a)
         try:
             f = date(a, mes, d)
@@ -88,12 +106,13 @@ def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
         if f > date.today():
             continue
         s, c = signo_por_fecha(f)
-        hallados.append((m.start(), DatoSigno(s, f, c, "fecha")))
+        hallados.append((pos, DatoSigno(s, f, c, "fecha")))
     for m in FECHA_MES.finditer(t):
         if EVENTO.search(t[:m.start()]):
             continue                 # "este sábado 10 de octubre" es un evento, no un cumpleaños
         try:
-            f = date(int(m.group(3) or 2000), MESES[m.group(2)], int(m.group(1)))
+            anio = int(m.group(3) or 2000)
+            f = date(_siglo(anio) if m.group(3) and len(m.group(3)) == 2 else anio, MESES[m.group(2)], int(m.group(1)))
         except ValueError:
             continue
         s, c = signo_por_fecha(f)
@@ -104,6 +123,27 @@ def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
 def _corte(t: str) -> int:
     tercero = TERCERO.search(t)
     return tercero.start() if tercero else len(t)   # lo que va después de un tercero es de ese tercero
+
+
+# Respuestas a medias a "¿cuál es tu fecha de nacimiento?": solo el año o solo el mes
+ANIO_SOLO = re.compile(r"\b(?:del?|ano|en|en el)\s+(?:ano\s+)?((?:19[3-9]\d|20[01]\d)|[3-9]\d)\b(?!\s*(?:anos|likes|monedas))")
+MES_SOLO = re.compile(r"\b(?:soy|naci|nacida|nacido|cumplo|cumpleanos)\b.{0,25}\b(" + "|".join(MESES) + r")\b"
+                      r"|\b(" + "|".join(MESES) + r")\s+(?:de|del)\s+(?:19|20)\d{2}\b"
+                      r"|^\W*(?:\w+\W+){0,2}(?:de |en )?(" + "|".join(MESES) + r")\W*$")
+
+
+def fecha_incompleta(texto: str) -> str | None:
+    """Qué dio la persona cuando no alcanza para saber su signo: "mes" (falta el día) o
+    "anio" (faltan día y mes). None si el texto trae la fecha o no habla de eso."""
+    t = _norm(texto)
+    if _fechas(t) or SIGNO_TXT.search(t) or any(g in t for g in GLIFOS):
+        return None
+    corte = _corte(t)
+    m = MES_SOLO.search(t)
+    if m and m.start() < corte:
+        return "mes"
+    m = ANIO_SOLO.search(t)
+    return "anio" if m and m.start() < corte else None
 
 
 def extraer(texto: str) -> DatoSigno | None:
@@ -143,6 +183,73 @@ def extraer_pareja(texto: str) -> DatoSigno | None:
     if m:
         return DatoSigno(NOMBRES[m.group(1)], None, False, "nombre")
     return None
+
+
+# ---------- ¿de quién es la fecha? ----------
+@dataclass
+class Reparto:
+    propio: DatoSigno | None             # dato de quien pregunta
+    pareja: DatoSigno | None             # dato de la otra persona (solo el signo)
+    dudosa: DatoSigno | None = None      # hay una fecha y no se sabe de cuál de los dos es
+    de_pareja: bool = False              # la única fecha del mensaje resultó ser de la otra persona
+
+
+_PRESENTACION = re.compile(r"\b(soy|me llamo|mi nombre es|mi fecha|naci|yo)\b")
+_DOS_PERSONAS_ANTES = re.compile(r"\bentre\b|\by\s+[a-zñ]+(\s+[a-zñ]+){0,2}\s*$")
+_DOS_PERSONAS_DESPUES = re.compile(r"^[\d\s/.\-_'’´`]*(\s*[a-zñ]+){0,2}\s*,?\s+y\s+[a-zñ]")
+_RESPUESTA_SUYA = re.compile(r"\bno es (la )?mia\b|\bde (el|ella|la otra persona)\b|\bsuy[ao]\b|"
+                             r"\bde mi (pareja|novi[oa]|espos[oa]|ex|marido|mujer)\b|^(es )?(la )?de (?!mi\b)[a-zñ]+$")
+_RESPUESTA_MIA = re.compile(r"\b(mia|mio)\b|\bmi fecha\b|^(es )?(la )?de mi$|^(si )?yo$")
+
+
+def _junto_a(t: str, pos: int) -> set[str]:
+    """Palabras pegadas a la fecha (el nombre de quien es), sin cruzar una "y" ni una coma."""
+    antes = re.split(r"\s+y\s+|,", t[:pos])[-1]
+    despues = re.split(r"(?:^|\s+)y\s+|,", re.sub(r"^[\d\s/.\-_'’´`]+", " ", t[pos:pos + 45]))[0]
+    return set(re.findall(r"[a-zñ]{4,}", antes)[-3:]) | set(re.findall(r"[a-zñ]{4,}", despues)[:2])
+
+
+def repartir(texto: str, nickname: str = "", user: str = "") -> Reparto:
+    """Como extraer + extraer_pareja, pero mirando junto a qué nombre está cada fecha y cómo se
+    llama la cuenta que escribe. "cómo se ven las cosas entre Carmen 12-10-93 y Fernando", escrito
+    por Fernando: la fecha es de Carmen. Si no hay cómo saberlo, la fecha queda como dudosa."""
+    r = Reparto(extraer(texto), extraer_pareja(texto))
+    t = _norm(texto)
+    fechas = [(pos, d) for pos, d in _fechas(t) if pos < _corte(t)]
+    if r.propio is None or r.propio.fuente != "fecha" or not fechas:
+        return r
+    cuenta = re.sub(r"[^a-zñ]", "", _norm(f"{nickname}{user}"))
+    es_suya = [any(p in cuenta for p in _junto_a(t, pos)) for pos, _ in fechas]
+    solo_signo = lambda d: DatoSigno(d.signo, None, d.en_cuspide, "fecha")
+
+    if len(fechas) >= 2:
+        if es_suya[1] and not es_suya[0]:            # "Cristian 11/10/99 y Luisa 23/12/00", escribe Luisa
+            r.propio, r.pareja = fechas[1][1], solo_signo(fechas[0][1])
+        return r
+    pos, dato = fechas[0]
+    if es_suya[0] or _PRESENTACION.search(t[:pos]):
+        return r                                      # "soy Ana 05/05/90…" o la fecha va junto a su nombre
+    nombres_cuenta = [p for p in re.findall(r"[a-zñ]{4,}", _norm(nickname)) if re.search(rf"\b{p}\b", t)]
+    if nombres_cuenta and _junto_a(t, pos):
+        # Su nombre está en el mensaje, pero lejos de la fecha: la fecha es de la otra persona
+        return Reparto(None, solo_signo(dato), de_pareja=True)
+    antes = [p for p in re.findall(r"[a-zñ]+", t[:pos]) if p not in ("hola", "buenas", "buenos", "dias", "tardes", "noches")]
+    if len(antes) <= 3 and not _DOS_PERSONAS_ANTES.search(t[:pos]):
+        return r                                      # "Ana 05/05/90 y Juan…": nombre y fecha al empezar, es la suya
+    if _DOS_PERSONAS_ANTES.search(t[:pos]) or _DOS_PERSONAS_DESPUES.search(t[pos:]):
+        return Reparto(None, r.pareja, dudosa=dato)   # dos personas, una fecha y nada que diga de quién es
+    return r
+
+
+def respuesta_duda(texto: str) -> str | None:
+    """Lo que contesta la persona a "¿esa fecha es tuya o de la otra persona?": "propia" o "pareja"."""
+    t = re.sub(r"[^a-zñ ]", " ", _norm(texto)).strip()
+    t = " ".join(t.split())
+    if not t or len(t.split()) > 7:
+        return None
+    if _RESPUESTA_SUYA.search(t):
+        return "pareja"
+    return "propia" if _RESPUESTA_MIA.search(t) else None
 
 
 def relacion(a: str, b: str) -> str:
