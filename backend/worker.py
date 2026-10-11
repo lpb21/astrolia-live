@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio, logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 from astro.cielo import Cielo, cielo
@@ -8,6 +9,7 @@ from astro.signos import es_menor
 from backend.cola import Cola, Item
 from backend.filtro import evaluar
 from backend.prompt import armar_prompt
+from tarot.tirada import CartaTirada, nivel_para, tirar
 
 log = logging.getLogger("worker")
 MAX_HISTORIAL = 50
@@ -28,18 +30,22 @@ class Salida:
     user: str
     nickname: str
     pregunta: str
-    tipo: str          # "lectura" | "mensaje_fijo" | "pide_fecha"
+    tipo: str          # "lectura" | "mensaje_fijo" | "pide_fecha" | "pide_pregunta"
     texto: str
     ts: datetime
+    cartas: list[CartaTirada] = field(default_factory=list)
+    nivel: str = ""
 
 
 class Worker:
     def __init__(self, cola: Cola, generador: Generador,
-                 palabras_por_seg: float = 2.5, espera_vacia: float = 1.0):
+                 palabras_por_seg: float = 2.5, espera_vacia: float = 1.0,
+                 rng: random.Random | None = None):
         self.cola = cola
         self.generador = generador
         self.palabras_por_seg = palabras_por_seg
         self.espera_vacia = espera_vacia
+        self.rng = rng                 # solo para pruebas; None = azar del sistema
         self.pausado = False
         self.actual: Item | None = None
         self.salidas: list[Salida] = []
@@ -59,7 +65,7 @@ class Worker:
 
     async def _entregar(self, item: Item, tipo: str, texto: str, ahora: datetime) -> None:
         self.salidas = (self.salidas + [Salida(item.user, item.nickname, item.pregunta,
-                                               tipo, texto, ahora)])[-MAX_HISTORIAL:]
+                                               tipo, texto, ahora, list(item.cartas), item.nivel)])[-MAX_HISTORIAL:]
         log.info(f"[{tipo.upper()}] {item.user}: {texto[:80]}")
         if self.palabras_por_seg > 0:
             await asyncio.sleep(len(texto.split()) / self.palabras_por_seg)
@@ -75,6 +81,8 @@ class Worker:
                     self._saltar(item, f.categoria, f.termino)
                 return
 
+        item.nivel = nivel_para(item.valor).nombre
+        item.cartas = tirar(item.valor, self.rng)     # la tirada se hace cuando llega el turno
         prompt = armar_prompt(item, self._cielo_actual(ahora), item.dato)
         r = await self.generador.generar(prompt)
         if r.get("sensible"):
@@ -88,21 +96,36 @@ class Worker:
             if es_menor(item.dato, ahora.date()):
                 self._saltar(item, "menor", "fecha de nacimiento")
 
-    async def _pedir_fechas(self, ahora: datetime) -> bool:
-        faltan = self.cola.sin_fecha(ahora)[:MAX_PEDIDOS]
+    async def _avisar(self, tipo: str, faltan: list[Item], uno: str, varios: str, ahora: datetime) -> bool:
         if not faltan:
             return False
-        for item in faltan:
-            item.pedido_fecha = ahora
         nombres = ", ".join(i.nickname for i in faltan)
-        texto = (f"{nombres}: para leerte necesito tu fecha de nacimiento. Escríbela en el chat con día, mes y año."
-                 if len(faltan) == 1 else
-                 f"{nombres}: para leerles necesito su fecha de nacimiento. Escríbanla en el chat con día, mes y año.")
-        self.salidas = (self.salidas + [Salida("", nombres, "", "pide_fecha", texto, ahora)])[-MAX_HISTORIAL:]
-        log.info(f"[PIDE_FECHA] {nombres}")
+        texto = f"{nombres}: {uno if len(faltan) == 1 else varios}"
+        self.salidas = (self.salidas + [Salida("", nombres, "", tipo, texto, ahora)])[-MAX_HISTORIAL:]
+        log.info(f"[{tipo.upper()}] {nombres}")
         if self.palabras_por_seg > 0:
             await asyncio.sleep(len(texto.split()) / self.palabras_por_seg)
         return True
+
+    async def _pedir_preguntas(self, ahora: datetime) -> bool:
+        faltan = self.cola.sin_pregunta(ahora)[:MAX_PEDIDOS]
+        for item in faltan:
+            item.pedido_pregunta = ahora
+        return await self._avisar(
+            "pide_pregunta", faltan,
+            "gracias por tu regalo. Escribe tu pregunta con tu fecha de nacimiento; "
+            "si prefieres, te leo el mensaje que las cartas tienen para ti.",
+            "gracias por su regalo. Escriban su pregunta con su fecha de nacimiento; "
+            "si prefieren, les leo el mensaje que las cartas tienen para ustedes.", ahora)
+
+    async def _pedir_fechas(self, ahora: datetime) -> bool:
+        faltan = self.cola.sin_fecha(ahora)[:MAX_PEDIDOS]
+        for item in faltan:
+            item.pedido_fecha = ahora
+        return await self._avisar(
+            "pide_fecha", faltan,
+            "para leerte necesito tu fecha de nacimiento. Escríbela en el chat con día, mes y año.",
+            "para leerles necesito su fecha de nacimiento. Escríbanla en el chat con día, mes y año.", ahora)
 
     async def paso(self, ahora: datetime | None = None) -> bool:
         """Pide fechas que falten y procesa un ítem. Devuelve True si hizo algo."""
@@ -110,7 +133,8 @@ class Worker:
             return False
         ahora = ahora or datetime.now(timezone.utc)
         self._descartar_menores(ahora)
-        pidio = await self._pedir_fechas(ahora)
+        pidio = await self._pedir_preguntas(ahora)
+        pidio = await self._pedir_fechas(ahora) or pidio
         item = self.cola.tomar_siguiente(ahora)
         if item is None:
             return pidio

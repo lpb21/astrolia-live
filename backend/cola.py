@@ -4,9 +4,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import re
 from astro.signos import DatoSigno, extraer, extraer_pareja
+from tarot.tirada import CartaTirada
 
 VENTANA = timedelta(seconds=120)
 ESPERA_FECHA = timedelta(seconds=90)   # tras pedir la fecha de nacimiento; luego se lee sin signo
+ESPERA_PREGUNTA = timedelta(seconds=60)   # mínimo que se espera la pregunta de quien ya regaló
 NO_PREGUNTA = {"presente", "gracias", "hola", "buenas", "buenas noches",
                "ok", "si", "sí", "no", "yo", "amen", "amén"}
 
@@ -27,15 +29,18 @@ def es_pregunta(texto: str) -> bool:
 class Item:
     user: str
     nickname: str
-    pregunta: str               # "" = lectura general
+    pregunta: str               # "" = aún no pregunta; si llega su turno así, es lectura general
     valor: int
     regalos: list[str]
-    ts: datetime                # cuándo quedó lista (pregunta + regalo)
+    ts: datetime                # cuándo entró a la fila (al llegar el regalo)
     estado: str = "pendiente"   # pendiente | leyendo | hecho | saltado
     extras: list[str] = field(default_factory=list)   # preguntas posteriores, máx 3
     dato: DatoSigno | None = None           # signo / fecha de nacimiento de quien pregunta
     pedido_fecha: datetime | None = None    # cuándo se le pidió la fecha en voz
+    pedido_pregunta: datetime | None = None # cuándo se le pidió la pregunta en voz
+    nivel: str = ""                         # nombre del nivel con el que se leyó
     pareja: DatoSigno | None = None         # signo de la otra persona, si lo dieron (nunca su fecha)
+    cartas: list[CartaTirada] = field(default_factory=list)   # la tirada; se saca cuando llega su turno
 
 
 @dataclass
@@ -48,12 +53,14 @@ class _Pendiente:
 
 
 class Cola:
-    def __init__(self, ventana: timedelta = VENTANA, espera_fecha: timedelta | None = ESPERA_FECHA):
+    def __init__(self, ventana: timedelta = VENTANA, espera_fecha: timedelta | None = ESPERA_FECHA,
+                 espera_pregunta: timedelta = ESPERA_PREGUNTA):
         self.ventana = ventana
+        self.espera_pregunta = espera_pregunta
         self.espera_fecha = espera_fecha              # None = no exigir fecha de nacimiento
         self._datos: dict[str, DatoSigno] = {}        # último dato de nacimiento que dio cada usuario
         self._preguntas: dict[str, _Pendiente] = {}   # pregunta esperando regalo
-        self._regalos: dict[str, _Pendiente] = {}     # regalo esperando pregunta
+        self._regalos: dict[str, _Pendiente] = {}     # regalo de alguien a quien se le está leyendo
         self._items: dict[str, Item] = {}             # un ítem abierto por usuario
         self.historial: list[Item] = []
         self._msg_vistos: OrderedDict[int, None] = OrderedDict()
@@ -94,14 +101,9 @@ class Cola:
         item = self._items.get(user)
         if item and item.estado == "pendiente":
             if not item.pregunta:
-                item.pregunta = texto        # era lectura general y llegó la pregunta
+                item.pregunta = texto        # ya estaba en la fila por su regalo y llegó la pregunta
             elif texto != item.pregunta and texto not in item.extras:
                 item.extras = (item.extras + [texto])[-3:]
-            return
-        r = self._regalos.get(user)
-        if r and ts - r.ts <= self.ventana:
-            del self._regalos[user]
-            self._crear(user, nickname, texto, r.valor, r.regalos, ts)
             return
         self._preguntas[user] = _Pendiente(nickname, ts, texto=texto)
 
@@ -111,25 +113,26 @@ class Cola:
             item.valor += valor
             item.regalos.append(regalo)
             return
-        p = self._preguntas.get(user)
-        if p and ts - p.ts <= self.ventana:
-            del self._preguntas[user]
-            self._crear(user, nickname, p.texto, valor, [regalo], ts)
+        if item:                             # se le está leyendo: el regalo abre un turno nuevo al cerrar
+            r = self._regalos.setdefault(user, _Pendiente(nickname, ts))
+            r.valor += valor
+            r.regalos.append(regalo)
             return
-        r = self._regalos.setdefault(user, _Pendiente(nickname, ts))
-        r.valor += valor
-        r.regalos.append(regalo)
+        self._crear(user, nickname, valor, [regalo], ts)
 
-    def _crear(self, user, nickname, texto, valor, regalos, ts):
+    def _crear(self, user, nickname, valor, regalos, ts):
+        """El regalo entra a la fila de inmediato, con la pregunta reciente si la hay."""
+        p = self._preguntas.pop(user, None)
+        texto = p.texto if p and ts - p.ts <= self.ventana else ""
         self._items[user] = Item(user, nickname, texto, valor, list(regalos), ts,
                                  dato=self._datos.get(user), pareja=extraer_pareja(texto))
 
     # ---------- mantenimiento ----------
     def _vencer(self, ahora: datetime) -> None:
         for user, r in list(self._regalos.items()):
-            if ahora - r.ts > self.ventana and user not in self._items:
+            if user not in self._items:
                 del self._regalos[user]
-                self._crear(user, r.nickname, "", r.valor, r.regalos, r.ts)
+                self._crear(user, r.nickname, r.valor, r.regalos, r.ts)
         for user, p in list(self._preguntas.items()):
             if ahora - p.ts > self.ventana:
                 del self._preguntas[user]
@@ -140,16 +143,30 @@ class Cola:
         abiertos = [i for i in self._items.values() if i.estado == "pendiente"]
         return sorted(abiertos, key=lambda i: (-i.valor, i.ts))
 
+    def falta(self, item: Item) -> list[str]:
+        """Qué le falta escribir a la persona: "pregunta" o "fecha". La fecha solo se exige
+        cuando hay pregunta; el mensaje sin pregunta no la necesita."""
+        if not item.pregunta:
+            return ["pregunta"]
+        if item.dato is None and self.espera_fecha is not None:
+            return ["fecha"]
+        return []
+
     def _lista(self, item: Item, ahora: datetime) -> bool:
-        if item.dato or self.espera_fecha is None:
-            return True
-        return item.pedido_fecha is not None and ahora - item.pedido_fecha > self.espera_fecha
+        falta = self.falta(item)
+        if "pregunta" in falta:              # tiene hasta su turno, y como mínimo espera_pregunta
+            return ahora - item.ts >= self.espera_pregunta
+        if "fecha" in falta:
+            return item.pedido_fecha is not None and ahora - item.pedido_fecha > self.espera_fecha
+        return True
 
     def sin_fecha(self, ahora: datetime) -> list[Item]:
-        """Ítems a los que todavía no se les ha pedido la fecha de nacimiento."""
-        if self.espera_fecha is None:
-            return []
-        return [i for i in self.pendientes(ahora) if i.dato is None and i.pedido_fecha is None]
+        """Ítems con pregunta a los que todavía no se les ha pedido la fecha de nacimiento."""
+        return [i for i in self.pendientes(ahora) if self.falta(i) == ["fecha"] and i.pedido_fecha is None]
+
+    def sin_pregunta(self, ahora: datetime) -> list[Item]:
+        """Ítems que regalaron sin preguntar y a los que todavía no se les ha pedido la pregunta."""
+        return [i for i in self.pendientes(ahora) if not i.pregunta and i.pedido_pregunta is None]
 
     def tomar_siguiente(self, ahora: datetime) -> Item | None:
         for item in self.pendientes(ahora):

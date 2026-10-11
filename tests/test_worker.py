@@ -143,3 +143,60 @@ def test_fecha_de_la_pareja_menor_no_descarta_a_quien_pregunta():
     c, w = preparar("soy Ana 05/05/90 mi hijo 15/03/2010 pasará el año?", gen, ESPERA)
     correr(w)
     assert all(s["categoria"] != "menor" or s["motivo"] != "fecha de nacimiento" for s in w.saltados)
+
+
+def test_lectura_sale_con_su_tirada():
+    gen = GenFijo()
+    c, w = preparar("mi novio me sigue queriendo?", gen)
+    correr(w)
+    salida, item = w.salidas[-1], c.historial[-1]
+    assert [t.posicion for t in salida.cartas] == ["mensaje"]          # una rosa = 1 moneda
+    assert salida.nivel == "Mensaje del oráculo"
+    assert salida.cartas == item.cartas
+    assert f"Mensaje: {salida.cartas[0].carta.nombre}" in gen.prompts[0]["messages"][0]["content"]
+
+def test_mensaje_fijo_y_saltados_no_sacan_cartas():
+    c, w = preparar("mi hija se desmaya")
+    correr(w)
+    assert w.salidas[-1].tipo == "mensaje_fijo" and w.salidas[-1].cartas == []
+    c, w = preparar("quedaré embarazada pronto")
+    correr(w)
+    assert c.historial[-1].cartas == []
+
+
+def test_regalo_sin_pregunta_se_avisa_y_espera():
+    gen = GenFijo()
+    c, w = preparar("", gen, ESPERA)
+    assert correr(w)
+    assert [s.tipo for s in w.salidas] == ["pide_pregunta"] and "pregunta" in w.salidas[0].texto
+    assert not correr(w, 30) and gen.prompts == []            # no se repite el aviso ni se lee aún
+
+def test_sin_pregunta_recibe_el_mensaje_sin_pedirle_fecha():
+    gen = GenFijo()
+    c, w = preparar("", gen, ESPERA)
+    correr(w)
+    assert correr(w, 61)
+    assert [s.tipo for s in w.salidas] == ["pide_pregunta", "lectura"]
+    assert "LECTURA GENERAL" in gen.prompts[0]["messages"][0]["content"]
+
+def test_pregunta_tardia_con_fecha_se_lee_como_pregunta():
+    gen = GenFijo()
+    c, w = preparar("", gen, ESPERA)
+    correr(w)
+    comentar(c, "soy Ana 05/05/90 me va a buscar Juan?", 90)
+    correr(w, 91)
+    assert [s.tipo for s in w.salidas] == ["pide_pregunta", "lectura"]
+    assert "me va a buscar Juan?" in gen.prompts[0]["messages"][0]["content"]
+
+def test_segunda_pregunta_solo_desde_30_monedas():
+    def contenido(valor):
+        gen = GenFijo()
+        c = Cola(espera_fecha=None)
+        w = Worker(c, gen, palabras_por_seg=0)
+        comentar(c, "me va a buscar este mes?", 0)
+        c.procesar({"tipo": "gift", "user": "u", "nickname": "U", "regalo": "X", "valor": valor, "ts": T0.isoformat()})
+        comentar(c, "y en el trabajo me irá bien?", 1)
+        correr(w, 2)
+        return gen.prompts[0]["messages"][0]["content"]
+    assert "Responde también" in contenido(30) and "Tipo de lectura: Lectura doble" in contenido(30)
+    assert "Responde también" not in contenido(10)

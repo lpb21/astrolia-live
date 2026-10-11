@@ -39,9 +39,10 @@ def test_regalos_se_suman():                # araceli, dos rachas
 def test_regalo_sin_pregunta_es_lectura_general():
     c = Cola()
     c.procesar(ev("gift", "alma", 0, regalo="Rose", valor=3))
-    assert c.pendientes(T0 + timedelta(seconds=60)) == []
-    [item] = c.pendientes(T0 + timedelta(seconds=121))
-    assert item.pregunta == "" and item.valor == 3
+    [item] = c.pendientes(T0 + timedelta(seconds=1))          # entra a la fila de inmediato
+    assert item.pregunta == "" and item.valor == 3 and c.falta(item) == ["pregunta"]
+    assert c.tomar_siguiente(T0 + timedelta(seconds=59)) is None      # se le dan 60 s para preguntar
+    assert c.tomar_siguiente(T0 + timedelta(seconds=60)) is item
 
 def test_orden_por_valor_y_ts():
     c = Cola()
@@ -107,3 +108,42 @@ def test_pareja_llega_despues():
     c.procesar(ev("comment", "ana", 5, texto="mi ex es del 02/07/88"))
     [item] = c.pendientes(T0 + timedelta(seconds=6))
     assert item.dato.signo == "Tauro" and item.pareja.signo == "Cáncer"
+
+
+def test_pregunta_tras_60s_se_toma_si_aun_no_le_leen():
+    c = Cola()
+    c.procesar(ev("gift", "lu", 0, regalo="Rose", valor=4))
+    c.procesar(ev("comment", "lu", 90, texto="soy Lu 05/05/90 me va a buscar Juan?"))
+    item = c.tomar_siguiente(T0 + timedelta(seconds=91))
+    assert "Juan" in item.pregunta and item.dato.signo == "Tauro" and c.falta(item) == []
+
+def test_sin_pregunta_no_frena_a_los_que_ya_estan_listos():
+    c = Cola(espera_fecha=None)
+    c.procesar(ev("gift", "rico", 0, regalo="Hand Heart", valor=100))          # más valor, sin pregunta
+    c.procesar(ev("comment", "ana", 1, texto="me va a buscar este mes"))
+    c.procesar(ev("gift", "ana", 2, regalo="Rose", valor=1))
+    assert [i.user for i in c.pendientes(T0 + timedelta(seconds=3))] == ["rico", "ana"]
+    assert c.tomar_siguiente(T0 + timedelta(seconds=3)).user == "ana"         # rico sigue con tiempo
+    c.cerrar("ana")
+    assert c.tomar_siguiente(T0 + timedelta(seconds=61)).user == "rico"
+
+def test_falta_fecha_solo_si_hay_pregunta():
+    c = Cola()
+    c.procesar(ev("gift", "a", 0, regalo="Rose", valor=1))
+    c.procesar(ev("comment", "b", 0, texto="me va a buscar este mes"))
+    c.procesar(ev("gift", "b", 1, regalo="Rose", valor=1))
+    faltas = {i.user: c.falta(i) for i in c.pendientes(T0 + timedelta(seconds=2))}
+    assert faltas == {"a": ["pregunta"], "b": ["fecha"]}
+    assert [i.user for i in c.sin_fecha(T0 + timedelta(seconds=2))] == ["b"]
+    assert [i.user for i in c.sin_pregunta(T0 + timedelta(seconds=2))] == ["a"]
+
+def test_regalo_mientras_le_leen_abre_turno_nuevo_al_cerrar():
+    c = Cola(espera_fecha=None)
+    c.procesar(ev("comment", "u", 0, texto="me va a buscar este mes"))
+    c.procesar(ev("gift", "u", 1, regalo="Rose", valor=1))
+    primero = c.tomar_siguiente(T0 + timedelta(seconds=2))
+    c.procesar(ev("gift", "u", 5, regalo="Doughnut", valor=30))
+    assert primero.valor == 1 and c.pendientes(T0 + timedelta(seconds=6)) == []
+    c.cerrar("u")
+    [nuevo] = c.pendientes(T0 + timedelta(seconds=7))
+    assert nuevo.valor == 30 and nuevo.pregunta == ""

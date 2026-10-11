@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from backend.cola import Cola
 from backend.filtro import evaluar
 from backend.worker import Worker, GeneradorFalso
+from tarot.tirada import NIVELES, nivel_para
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -48,7 +49,16 @@ async def recibir(ev: EventoIn):
 def _con_filtro(item) -> dict:
     d = asdict(item)
     d["filtro"] = asdict(evaluar(item.pregunta)) if item.pregunta else None
+    d["nivel"] = nivel_para(item.valor).nombre
+    d["falta"] = cola.falta(item)          # para marcar en la lista de turnos: "pregunta" o "fecha"
     return d
+
+
+@app.get("/menu")
+async def menu():
+    """Niveles que se muestran en el overlay, del más barato al más caro."""
+    return [{"monedas": n.minimo, "nombre": n.nombre, "cartas": len(n.posiciones)}
+            for n in reversed(NIVELES) if n.en_menu]
 
 
 @app.get("/cola")
