@@ -7,6 +7,9 @@ from astro.cielo import SIGNOS, jd, longitud, signo_de
 
 MESES = {"enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6, "julio": 7,
          "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12}
+# Mes abreviado ("19 feb 94") y mes antes del día ("junio 11 90"); solo cuentan con día y año
+_ABREV = {"ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6, "jul": 7, "ago": 8, "sep": 9, "sept": 9,
+          "set": 9, "oct": 10, "nov": 11, "dic": 12}
 NOMBRES = {"aries": "Aries", "tauro": "Tauro", "geminis": "Géminis", "cancer": "Cáncer",
            "leo": "Leo", "virgo": "Virgo", "libra": "Libra", "escorpio": "Escorpio",
            "escorpion": "Escorpio", "sagitario": "Sagitario", "capricornio": "Capricornio",
@@ -17,7 +20,7 @@ GLIFOS = {"♈": "Aries", "♉": "Tauro", "♊": "Géminis", "♋": "Cáncer", "
 
 # DD/MM/AA con los separadores que usa la gente en el chat, incluido el apóstrofo: 30'06'08.
 # El año puede venir pegado a la palabra siguiente ("30'06'08Puedes decirme").
-_SEP = r"\s*[/.\-_ '’´`]\s*"
+_SEP = r"\s*[/.\-_ ;'’´`]\s*"
 FECHA_NUM = re.compile(r"\b(\d{1,2})" + _SEP + r"(\d{1,2})" + _SEP + r"(\d{4}|\d{2})(?!\d)")
 # Fechas escritas de corrido, como llegan del chat: "08112007", "050489", "05 0489"
 FECHA_PEGADA = re.compile(r"\b(\d{2})(\d{2})((?:19|20)\d{2}|\d{2})\b|\b(\d{1,2})[/.\-_ ](\d{2})(\d{2})\b")
@@ -79,13 +82,17 @@ def es_menor(dato: DatoSigno | None, hoy: date) -> bool:
     return hoy.year - f.year - ((hoy.month, hoy.day) < (f.month, f.day)) < 18
 
 
+FECHA_ABREV = re.compile(r"\b(\d{1,2})\s+(?:de\s+)?(" + "|".join(_ABREV) + r")\.?\s+(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
+FECHA_MES_DIA = re.compile(r"\b(" + "|".join(MESES) + r")\s+(\d{1,2})\s*,?\s+(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
+
+
 def _tapar(m: re.Match) -> str:
     return " " * len(m.group(0))      # conserva las posiciones del texto
 
 
 def sin_fechas(texto: str) -> str:
     """El texto sin fechas de nacimiento, para mostrarlo en pantalla o buscarle la pregunta."""
-    for patron in (FECHA_NUM, FECHA_PEGADA):
+    for patron in (FECHA_NUM, FECHA_PEGADA, FECHA_ABREV, FECHA_MES_DIA):
         texto = patron.sub(" ", texto)
     return " ".join(texto.split())
 
@@ -99,6 +106,8 @@ def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
         d, mes, a = int(g1), int(g2), int(g3)
         if len(g3) == 2:
             a = _siglo(a)
+        if mes > 12 >= d:
+            d, mes = mes, d              # 12/30/82: escrito al estilo mes/día
         try:
             f = date(a, mes, d)
         except ValueError:
@@ -107,6 +116,19 @@ def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
             continue
         s, c = signo_por_fecha(f)
         hallados.append((pos, DatoSigno(s, f, c, "fecha")))
+    tomadas = [m.span() for m in FECHA_MES.finditer(t)]
+    for patron, orden in ((FECHA_ABREV, (1, 2, 3)), (FECHA_MES_DIA, (2, 1, 3))):
+        for m in patron.finditer(t):
+            if any(a < m.end() and m.start() < b for a, b in tomadas) or EVENTO.search(t[:m.start()]):
+                continue
+            d, mes, a = (m.group(i) for i in orden)
+            try:
+                f = date(_siglo(int(a)) if len(a) == 2 else int(a), {**MESES, **_ABREV}[mes], int(d))
+            except ValueError:
+                continue
+            if f <= date.today():
+                s, c = signo_por_fecha(f)
+                hallados.append((m.start(), DatoSigno(s, f, c, "fecha")))
     for m in FECHA_MES.finditer(t):
         if EVENTO.search(t[:m.start()]):
             continue                 # "este sábado 10 de octubre" es un evento, no un cumpleaños
@@ -223,12 +245,19 @@ def repartir(texto: str, nickname: str = "", user: str = "") -> Reparto:
     solo_signo = lambda d: DatoSigno(d.signo, None, d.en_cuspide, "fecha")
 
     if len(fechas) >= 2:
-        if es_suya[1] and not es_suya[0]:            # "Cristian 11/10/99 y Luisa 23/12/00", escribe Luisa
+        tramo = lambda i: re.split(r"\s+y\s+|,", t[fechas[i - 1][0] if i else 0:fechas[i][0]])[-1]
+        se_presenta = [bool(_PRESENTACION.search(tramo(i))) for i in (0, 1)]
+        if (es_suya[1] and not es_suya[0]) or (se_presenta[1] and not se_presenta[0]):
+            # "Cristian 11/10/99 y Luisa 23/12/00", escribe Luisa; o "…11 junio 1985, me llamo Ricardo 17;04 89"
             r.propio, r.pareja = fechas[1][1], solo_signo(fechas[0][1])
         return r
     pos, dato = fechas[0]
-    if es_suya[0] or _PRESENTACION.search(t[:pos]):
+    tramos = re.split(r"\s+y\s+|,", t[:pos])
+    if es_suya[0] or _PRESENTACION.search(tramos[-1]):
         return r                                      # "soy Ana 05/05/90…" o la fecha va junto a su nombre
+    if _PRESENTACION.search(" ".join(tramos[:-1])) and re.search(r"[a-zñ]{4,}", tramos[-1]):
+        # "soy Lesly, Simón Velásquez 28-2-96 regresará…": se presentó aparte; la fecha va con el otro nombre
+        return Reparto(None, solo_signo(dato), de_pareja=True)
     nombres_cuenta = [p for p in re.findall(r"[a-zñ]{4,}", _norm(nickname)) if re.search(rf"\b{p}\b", t)]
     if nombres_cuenta and _junto_a(t, pos):
         # Su nombre está en el mensaje, pero lejos de la fecha: la fecha es de la otra persona

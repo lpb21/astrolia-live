@@ -177,3 +177,35 @@ def test_respuesta_a_la_duda():
         assert respuesta_duda(t) == "pareja", t
     for t in ["me va a buscar este mes?", "hola", "gracias", "quiero saber si Carmen vuelve conmigo y cuándo será"]:
         assert respuesta_duda(t) is None, t
+
+
+def test_fechas_en_otros_formatos_del_chat():       # live del 11 de octubre
+    from astro.signos import repartir, sin_fechas
+    casos = {"Azucena Flores 12/30/82 Carlos Romero me quiere para algo serio": ("Capricornio", 1982),
+             "Erika junio 11 90 Franklin marzo 12 89. Que sucederá entre nosotros": ("Géminis", 1990),
+             "hector sonora 19 feb 94. me uso y todavía cruel conmigo": ("Piscis", 1994),
+             "soy Eli 1995 30 de junio que me conviene": ("Cáncer", None)}
+    for texto, (signo, anio) in casos.items():
+        d = extraer(texto)
+        assert d and d.signo == signo and (anio is None or d.fecha.year == anio), texto
+    assert extraer_pareja("Erika junio 11 90 Franklin marzo 12 89. Que sucederá entre nosotros").signo == "Piscis"
+    assert sin_fechas("hector 19 feb 94. volverá?") == "hector . volverá?"
+    assert extraer("nos vemos en marzo 12 personas, irá?") is None and extraer("el mar 12 veces me llamó") is None
+
+def test_se_presento_aparte_y_la_fecha_va_con_el_otro_nombre():
+    from astro.signos import repartir
+    r = repartir("soy Lesly, Simón Velásquez 28-2-96 regresará para algo serio en un futuro", "Les 🤍", "les.garcia43")
+    assert r.propio is None and r.de_pareja and r.pareja.signo == "Piscis"
+    for t in ["soy Rosa 29 10 1982 miguel me quiere", "Soy Ana, 05/05/90, me quiere Juan?",
+              "hola buenos días..Olga Hernández 16_12_63 Luis regresará conmigo"]:
+        assert repartir(t, "x", "y").propio is not None, t
+
+
+def test_me_llamo_con_la_segunda_fecha():           # Richy García, live del 12 de octubre
+    from astro.signos import repartir
+    r = repartir("jael me ha hecho infiel 11 junio 1985 , me llamo Ricardo 17;04 89", "Richy garcia", "richy")
+    assert r.propio.signo == "Aries" and r.propio.fecha.year == 1989 and r.pareja.signo == "Géminis"
+
+def test_anio_pegado_a_la_palabra_siguiente():      # Judith, live del 12 de octubre
+    d = extraer("soy Judith, octubre 10 de 90egresaré con la persona que ya no vivo?")
+    assert d and d.signo == "Libra" and d.fecha.year == 1990

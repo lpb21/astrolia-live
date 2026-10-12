@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from backend.cola import Cola
-from backend.frases import NO_SE_LEE, PIDE_FECHA, SOLO_ADULTOS
+from backend.frases import NO_SE_LEE, PIDE_FECHA, SALUD, SOLO_ADULTOS
 from backend.worker import Worker
 
 CERO = timedelta(0)
@@ -39,13 +39,13 @@ def test_lectura_normal():
     assert correr(w)
     assert w.salidas[-1].tipo == "lectura" and c.historial[-1].estado == "hecho"
 
-def test_embarazo_se_salta_sin_llamar_al_modelo():
+def test_embarazo_sin_rosquilla_se_le_pide_y_no_llama_al_modelo():
     gen = GenFijo()
-    c, w = preparar("quedaré embarazada pronto", gen)
+    c, w = preparar("quedaré embarazada pronto", gen)             # regaló una rosa: 1 moneda
     correr(w)
     assert gen.prompts == [] and c.historial[-1].estado == "saltado"
-    [s] = w.salidas                                   # quien regaló no se queda sin respuesta
-    assert s.tipo == "mensaje_fijo" and s.texto == NO_SE_LEE[0] and s.pregunta == "" and s.cartas == []
+    [s] = w.salidas
+    assert s.tipo == "pide_regalo" and "rosquilla" in s.texto and s.cartas == []
 
 def test_salud_mensaje_fijo_sin_modelo():
     gen = GenFijo()
@@ -57,7 +57,7 @@ def test_segundo_filtro_del_modelo():
     gen = GenFijo({"sensible": True, "categoria": "salud", "respuesta": ""})
     c, w = preparar("me irá bien con mi tratamiento?", gen)
     correr(w)
-    assert [s.texto for s in w.salidas] == [NO_SE_LEE[0]] and w.saltados[-1]["categoria"] == "salud"
+    assert [s.texto for s in w.salidas] == [SALUD[0].format(n="U")] and w.saltados[-1]["categoria"] == "salud"
 
 def test_error_del_generador_no_tumba_el_worker():
     c, w = preparar("me buscará este mes?", GenFijo(error=RuntimeError("timeout")))
@@ -470,7 +470,7 @@ def test_pregunta_nueva_despues_de_una_respondida_si_entra():
     comentar(c, "me va a buscar Juan este mes?", 0)
     correr(w, 1)
     comentar(c, "Me va a buscar Juan este mes ??", 20)          # la misma, escrita distinto
-    assert not correr(w, 21)
+    assert correr(w, 21) and w.salidas[-1].tipo == "agotada"    # no se relee: se le avisa que ya usó su gratis
     c.procesar({"tipo": "gift", "user": "u", "nickname": "U", "regalo": "Rose", "valor": 1, "ts": (T0 + timedelta(seconds=30)).isoformat()})
     comentar(c, "y en el trabajo me irá bien?", 35)             # otra pregunta, con regalo
     correr(w, 36)
@@ -516,3 +516,165 @@ def test_sin_bienvenida_configurada_no_se_guarda_a_nadie():
     w = Worker(Cola(), GenFijo(), palabras_por_seg=0)
     w.llegada("a", "Ana")
     assert not correr(w, 0) and w.salidas == []
+
+
+def test_si_dice_que_la_mando_al_interno_se_le_pide_en_el_chat():       # mylove, live del 11 de octubre
+    gen = GenFijo()
+    c = Cola(espera_fecha=None)
+    w = Worker(c, gen, palabras_por_seg=0)
+    c.procesar({"tipo": "gift", "user": "u", "nickname": "mylove", "regalo": "Singing Mushroom", "valor": 99, "ts": T0.isoformat()})
+    correr(w, 1)                                               # le pide la pregunta
+    comentar(c, "te envie la pregunta al interno", 60)
+    comentar(c, "ya te la mandé por privado", 65)
+    assert correr(w, 66)
+    assert [s.tipo for s in w.salidas] == ["pide_pregunta", "pide_pregunta"]
+    assert "aquí en el chat" in w.salidas[-1].texto and "mylove" in w.salidas[-1].texto
+    assert not correr(w, 70)                                   # se le dice una sola vez
+    comentar(c, "le llegará el karma a Héctor por el daño que me hizo?", 90)
+    correr(w, 91)
+    assert w.salidas[-1].tipo == "lectura" and "karma" in gen.prompts[0]["messages"][0]["content"]
+
+def test_hablar_del_interno_sin_regalo_no_dispara_el_aviso():
+    c = Cola(espera_fecha=None)
+    w = Worker(c, GenFijo(), palabras_por_seg=0)
+    comentar(c, "te escribí al interno", 0)
+    assert not correr(w, 1) and w.salidas == []
+
+
+# ---------- embarazo: se lee con rosquilla (Susel Ríos, live del 12 de octubre) ----------
+def test_embarazo_con_rosquilla_se_lee():
+    gen = GenFijo()
+    c = Cola(espera_fecha=None)
+    w = Worker(c, gen, palabras_por_seg=0)
+    c.procesar({"tipo": "gift", "user": "u", "nickname": "Susel", "regalo": "Doughnut", "valor": 30, "ts": T0.isoformat()})
+    comentar(c, "saber si estoy embarazada?", 20)
+    correr(w, 21)
+    assert w.salidas[-1].tipo == "lectura" and "embarazada" in gen.prompts[0]["messages"][0]["content"]
+    assert "EMBARAZO" in gen.prompts[0]["system"] and "confirme con una prueba" in gen.prompts[0]["system"]
+
+def test_embarazo_gratis_se_le_pide_la_rosquilla_de_una_y_al_enviarla_se_lee():
+    gen = GenFijo()
+    c = Cola(espera_fecha=ESPERA, espera_gratis=CERO)
+    w = Worker(c, gen, palabras_por_seg=0)
+    comentar(c, "soy Ana 05/05/90 estoy embarazada?", 0)
+    assert correr(w, 1)
+    assert [s.tipo for s in w.salidas] == ["pide_regalo"] and "Envíala" in w.salidas[0].texto or "envía una rosquilla" in w.salidas[0].texto
+    assert c.pendientes(T0 + timedelta(seconds=2)) == [] and gen.prompts == []
+    c.procesar({"tipo": "gift", "user": "u", "nickname": "U", "regalo": "Doughnut", "valor": 30,
+                "ts": (T0 + timedelta(seconds=40)).isoformat()})
+    correr(w, 41)
+    assert w.salidas[-1].tipo == "lectura" and w.salidas[-1].nivel == "Lectura doble"
+    comentar(c, "y me va a buscar Juan este mes?", 60)          # su pregunta gratis seguía intacta
+    correr(w, 61)
+    assert w.salidas[-1].nivel == "Sí o no"
+
+def test_embarazo_con_regalo_pequeno_no_alcanza():
+    gen = GenFijo()
+    c = Cola(espera_fecha=None)
+    w = Worker(c, gen, palabras_por_seg=0)
+    comentar(c, "quedaré embarazada este año?", 0)
+    c.procesar({"tipo": "gift", "user": "u", "nickname": "U", "regalo": "Rose", "valor": 5, "ts": T0.isoformat()})
+    correr(w, 1)
+    assert w.salidas[-1].tipo == "pide_regalo" and gen.prompts == []
+
+
+# ---------- cartel de pregunta gratis agotada ----------
+def test_gratis_agotada_se_avisa_una_vez_con_cartel():
+    from backend.overlay import vista
+    gen = GenFijo()
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, gen, palabras_por_seg=0)
+    comentar(c, "me va a buscar Juan este mes?", 0)
+    correr(w, 1)                                                # su pregunta gratis
+    assert vista(c, w, T0 + timedelta(seconds=2))["cartel"] is None
+    comentar(c, "y en el trabajo me irá bien?", 30)
+    assert correr(w, 31)
+    s = w.salidas[-1]
+    assert s.tipo == "agotada" and "ya usaste tu pregunta gratis" in s.texto and "regalo" in s.texto
+    assert vista(c, w, T0 + timedelta(seconds=40))["cartel"] == "U"
+    assert vista(c, w, T0 + timedelta(seconds=60))["cartel"] is None       # el cartel dura unos segundos
+    comentar(c, "y con mi familia cómo me irá?", 70)
+    assert not correr(w, 71) and len(gen.prompts) == 1                     # no se repite el aviso ni se lee
+
+def test_charla_de_quien_ya_uso_la_gratis_no_dispara_el_cartel():
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, GenFijo(), palabras_por_seg=0)
+    comentar(c, "me va a buscar Juan este mes?", 0)
+    correr(w, 1)
+    for n, t in enumerate(["gracias bella", "Bonito domingo bella ✨ gracias", "él es así muy orgulloso"]):
+        comentar(c, t, 10 + n)
+    assert not correr(w, 20)
+
+def test_con_regalo_no_sale_el_cartel():
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, GenFijo(), palabras_por_seg=0)
+    comentar(c, "me va a buscar Juan este mes?", 0)
+    correr(w, 1)
+    comentar(c, "y en el trabajo me irá bien?", 30)
+    c.procesar({"tipo": "gift", "user": "u", "nickname": "U", "regalo": "Rose", "valor": 1, "ts": (T0 + timedelta(seconds=31)).isoformat()})
+    correr(w, 32)
+    assert [s.tipo for s in w.salidas] == ["lectura", "lectura"]
+
+
+# ---------- salud: orientación con cariño ----------
+def test_salud_recibe_una_orientacion_y_no_se_leen_cartas():
+    gen = GenFijo()
+    c, w = preparar("quiero saber si tengo asma o disnea", gen)
+    correr(w)
+    [s] = w.salidas
+    assert s.tipo == "mensaje_fijo" and s.cartas == [] and gen.prompts == []
+    assert s.texto.startswith("U, ") and "médico" in s.texto
+    assert all("{n}" in f and ("médico" in f or "doctor" in f) for f in SALUD)
+
+
+# ---------- live del 12 de octubre (indiodeluz): Johanna, José, Judith y "¿hay preguntitas gratuitas?" ----------
+def test_el_cartel_vuelve_a_salir_cada_vez_que_insiste_pero_la_voz_avisa_una_vez():
+    from backend.overlay import vista
+    gen = GenFijo()
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, gen, palabras_por_seg=0)
+    P = "Hola soy johanna urbina 150986 quiero Saber si Jonathan ya tiene una relación con otra persona"
+    comentar(c, P, 0)
+    correr(w, 1)                                                  # su pregunta gratis
+    comentar(c, P, 33)                                            # la repite
+    assert vista(c, w, T0 + timedelta(seconds=34))["cartel"] == "U"
+    assert correr(w, 34) and w.salidas[-1].tipo == "agotada"
+    assert vista(c, w, T0 + timedelta(seconds=70))["cartel"] is None
+    comentar(c, P, 100)                                           # insiste más tarde
+    comentar(c, "soy johanna 150986 Jonathan dejó de amarme?", 105)
+    assert vista(c, w, T0 + timedelta(seconds=106))["cartel"] == "U"      # el cartel vuelve a salir
+    assert not correr(w, 106) and len(gen.prompts) == 1                   # la voz no se repite
+
+def test_cartel_con_varias_personas_muestra_las_tres_ultimas():
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, GenFijo(), palabras_por_seg=0)
+    for n, user in enumerate(["a", "b", "c", "d"]):
+        c.procesar({"tipo": "comment", "user": user, "nickname": user.upper(), "texto": "me va a buscar este mes?",
+                    "ts": T0.isoformat()})
+        correr(w, n + 1)
+    for n, user in enumerate(["a", "b", "c", "d"]):
+        c.procesar({"tipo": "comment", "user": user, "nickname": user.upper(), "texto": "y en el trabajo me irá bien?",
+                    "ts": (T0 + timedelta(seconds=40 + n)).isoformat()})
+    assert c.cartel(T0 + timedelta(seconds=45)) == "B, C, D"
+
+def test_pregunta_por_las_gratis_no_entra_a_la_fila_y_la_voz_explica():
+    from backend.frases import AVISO_GRATIS
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, GenFijo(), palabras_por_seg=0, aviso_gratis=timedelta(minutes=5))
+    correr(w, 0)
+    correr(w, 60)                                                 # el recordatorio de siempre
+    assert len(w.salidas) == 1
+    for seg, t in [(150, "hay preguntitas gratuitas??"), (151, "son gratis las preguntas?")]:
+        comentar(c, t, seg)
+    assert c.pendientes(T0 + timedelta(seconds=152)) == []
+    assert correr(w, 152) and w.salidas[-1].tipo == "aviso" and w.salidas[-1].texto in AVISO_GRATIS
+    comentar(c, "hay gratis?", 170)
+    assert not correr(w, 171)                                     # se acaba de explicar: no se repite enseguida
+    assert len(w.salidas) == 2
+    
+def test_limite_de_gasto_pausa_y_devuelve_el_turno():
+    from backend.generador import LimiteGasto
+    c, w = preparar("me buscará este mes?", GenFijo(error=LimiteGasto("usage limits")))
+    correr(w)
+    assert w.pausado and w.alerta and w.saltados == []
+    assert [i.user for i in c.pendientes(T0 + timedelta(seconds=2))] == ["u"]

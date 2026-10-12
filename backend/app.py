@@ -4,7 +4,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -13,7 +13,7 @@ from backend import bitacora, revision
 from backend.boost import Boost
 from backend.cola import Cola, es_pregunta, parece_pregunta, trae_pregunta
 from backend.filtro import evaluar
-from backend.overlay import CARTAS, vista
+from backend.overlay import CARPETAS, vista
 from backend.worker import Worker, GeneradorFalso
 from tarot.tirada import NIVELES, nivel_para
 
@@ -33,6 +33,32 @@ def _generador():
     return GeneradorFalso()
 
 
+def _clasificador():
+    """La IA que decide los mensajes dudosos (¿consulta o comentario?). Sin clave, deciden solo las reglas."""
+    if not os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLASIFICADOR_IA", "1") == "0":
+        return None
+    from backend.clasificador import ClasificadorClaude
+    c = ClasificadorClaude()
+    logging.info(f"mensajes dudosos con Claude ({c.modelo})")
+    return c
+
+
+def _voz():
+    """Voz local (Piper) si el modelo está descargado; sin él, el live sigue mudo como antes."""
+    from backend.voz import MODELO, VozPiper
+    modelo = Path(os.getenv("VOZ_MODELO") or MODELO)
+    if os.getenv("VOZ", "1") == "0":
+        return None
+    if not modelo.is_file():
+        logging.warning(f"sin voz: no está {modelo} (corre python -m tools.descargar_voz)")
+        return None
+    return VozPiper(modelo)
+
+
+voz = _voz()
+clasificador = _clasificador()
+_tareas: set = set()             # referencia fuerte a las clasificaciones en curso
+
 # Boost de likes: cada BOOST_CADA_MIN minutos (0 = solo a pedido, con POST /control/boost)
 _cada = int(os.getenv("BOOST_CADA_MIN", "10"))
 boost = Boost(cada=timedelta(minutes=_cada) if _cada > 0 else None)
@@ -47,7 +73,8 @@ _bienvenida = int(os.getenv("BIENVENIDA_CADA_SEG", "180"))
 cola = Cola()
 worker = Worker(cola, _generador(), boost=boost,
                 aviso_gratis=timedelta(minutes=_aviso) if _aviso > 0 else None,
-                bienvenida=timedelta(seconds=_bienvenida) if _bienvenida > 0 else None)
+                bienvenida=timedelta(seconds=_bienvenida) if _bienvenida > 0 else None,
+                voz=voz)
 
 
 @asynccontextmanager
@@ -58,6 +85,8 @@ async def lifespan(app: FastAPI):
     archivo.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logging.getLogger().addHandler(archivo)
     bitacora.abrir(Path(f"logs/{datetime.now():%Y-%m-%d_%H-%M-%S}_bitacora.jsonl"))
+    if voz is not None:
+        _tareas.add(asyncio.create_task(voz.calentar()))      # carga el modelo sin frenar el arranque
     tarea = asyncio.create_task(worker.correr())
     yield
     tarea.cancel()
@@ -90,11 +119,30 @@ async def recibir(ev: EventoIn):
     if ev.tipo == "join":
         worker.llegada(ev.user, ev.nickname)
         return
-    cola.procesar(ev.model_dump())
+    if ev.tipo == "comment" and clasificador and cola.dudoso(ev.texto):
+        # La IA decide sin frenar la respuesta a la ingesta; el mensaje entra a la fila con su veredicto
+        tarea = asyncio.create_task(_con_ia(ev, ts))
+        _tareas.add(tarea)
+        tarea.add_done_callback(_tareas.discard)
+        return
+    _entrar(ev, ts)
+
+
+async def _con_ia(ev: EventoIn, ts: datetime) -> None:
+    limpio = cola.sin_mencion(ev.texto) or ev.texto
+    _entrar(ev, ts, await clasificador.es_pregunta(limpio, cola.ya_le_leyeron(ev.user)))
+
+
+def _entrar(ev: EventoIn, ts: datetime, veredicto: bool | None = None) -> None:
+    cola.procesar(ev.model_dump(), veredicto)
     cola.pendientes(ahora())         # deja la fila al día para anotar en qué quedó la persona
     if ev.tipo == "comment":
-        dato, tema = extraer(ev.texto), evaluar(ev.texto)
-        bitacora.anotar("comentario", ev.user, ev.nickname, ts, texto=ev.texto, es=_clase(ev.texto, dato),
+        limpio = cola.sin_mencion(ev.texto)          # sin la arroba inicial; None = le habla a otra persona
+        dato, tema = extraer(limpio or ""), evaluar(limpio or "")
+        es = ("respuesta a otra persona del chat" if limpio is None else
+              _clase(limpio, dato) if veredicto is None else
+              "pregunta (lo decidió la IA)" if veredicto else "comentario (lo decidió la IA)")
+        bitacora.anotar("comentario", ev.user, ev.nickname, ts, texto=ev.texto, es=es,
                         signo=dato.signo if dato else "", tema=tema.categoria if tema.sensible else "",
                         situacion=cola.situacion(ev.user))
     elif ev.tipo == "gift":
@@ -165,6 +213,7 @@ async def lanzar_boost():
 @app.post("/control/reanudar")
 async def reanudar():
     worker.pausado = False
+    worker.alerta = ""
     return {"pausado": False}
 
 
@@ -172,6 +221,7 @@ async def reanudar():
 async def estado():
     return {
         "pausado": worker.pausado,
+        "alerta": worker.alerta,
         "actual": asdict(worker.actual) if worker.actual else None,
         "en_cola": len(cola.pendientes(ahora())),
         "ultimas_salidas": [asdict(s) for s in worker.salidas[-5:]],
@@ -194,6 +244,15 @@ async def revision_datos(sesion: str = ""):
     return {"sesion": sesion, **revision.resumen(revision.leer(sesion))}
 
 
+@app.get("/overlay/audio/{clave}.wav")
+async def audio(clave: str):
+    """Un trozo de voz. El overlay lo pide con la ruta que le llega en el estado."""
+    datos = worker.audios.get(clave)
+    if datos is None:
+        return Response(status_code=404)
+    return Response(datos, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/overlay/estado")
 async def estado_overlay():
     return vista(cola, worker, ahora())
@@ -207,8 +266,9 @@ class SinCache(StaticFiles):
         return r
 
 
-if CARTAS.is_dir():      # sin imágenes el overlay dibuja las cartas; ver tools/descargar_cartas.py
-    app.mount("/overlay/cartas", SinCache(directory=CARTAS), name="cartas")
+for _ruta, _carpeta in CARPETAS:      # sin imágenes el overlay dibuja las cartas; ver tools/descargar_cartas.py
+    if _carpeta.is_dir():
+        app.mount(f"/overlay/{_ruta}", SinCache(directory=_carpeta), name=_ruta)
 # Página para revisar el live persona por persona: http://127.0.0.1:8000/revision/ (no sale al aire)
 app.mount("/revision", SinCache(directory=Path(__file__).parent.parent / "revision", html=True), name="revision")
 # Fuente de navegador para LIVE Studio: http://127.0.0.1:8000/overlay/

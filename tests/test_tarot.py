@@ -66,7 +66,7 @@ def test_cada_carta_tiene_imagen():
     import pytest
     from pathlib import Path
     carpeta = Path(__file__).resolve().parent.parent / "tarot" / "img"
-    if not carpeta.exists():
+    if not any(carpeta.glob("*.jpg")):
         pytest.skip("sin imágenes; corre python -m tools.descargar_cartas")
     faltan = [c.id for c in MAZO if not (carpeta / f"{c.id}.jpg").exists()]
     assert faltan == [], f"cartas sin imagen: {faltan}"

@@ -52,7 +52,7 @@ def _estado(p: dict) -> tuple[str, str]:
         estado = ultima_situacion
     if p["monedas"] and not pagas and "mensaje_fijo" not in tipos and not en_espera:
         alerta = "Regaló y no se le leyó con su regalo"
-    elif any(not e.get("pregunta") for e in pagas) and any(e.get("es") == "pregunta clara" for e in ev):
+    elif any(not e.get("pregunta") for e in pagas) and any(e.get("es", "").startswith(("pregunta clara", "pregunta (lo")) for e in ev):
         alerta = "Se le leyó un mensaje general aunque escribió una pregunta"
     return estado, alerta
 

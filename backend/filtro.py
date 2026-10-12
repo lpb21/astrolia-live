@@ -2,17 +2,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re, unicodedata
 
-# acción: "saltar" | "mensaje_fijo" | "permitir"
+# acción: "saltar" | "mensaje_fijo" | "con_regalo" | "permitir"
 ACCIONES = {
     "crisis": "mensaje_fijo",
     "salud": "mensaje_fijo",
-    "embarazo": "saltar",
+    "embarazo": "con_regalo",      # se lee solo con un regalo de MINIMO monedas o más
     "menor": "saltar",
     "violencia": "mensaje_fijo",
     "brujeria": "saltar",
     "dinero_legal": "saltar",
     "acusacion": "saltar",
 }
+
+# Temas que se leen solo desde cierto regalo (30 monedas = una rosquilla/Doughnut)
+MINIMO = {"embarazo": 30}
 
 MENSAJES = {
     "crisis": "Si estás pasando por un momento muy difícil, busca ahora a alguien de confianza "

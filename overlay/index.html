@@ -13,11 +13,21 @@
 <!-- Lienzo fijo de 1080×1920 que se escala a la ventana. Fondo transparente: la escena y el
      avatar van detrás, en LIVE Studio. Parámetros: ?demo=1 (datos de muestra) y ?fondo=1. -->
 <main id="lienzo">
-  <section id="turnos" class="panel" hidden>
-    <h2>Turnos <span id="turnos-total"></span></h2>
-    <ol id="turnos-lista"></ol>
-    <p id="turnos-mas" hidden></p>
-  </section>
+  <!-- Avatar: imagen fija y, encima, los bucles de video que existan en overlay/avatar/
+       (reposo.mp4, hablando.mp4, gato.mp4). Sin archivos, el fondo queda transparente. -->
+  <div id="avatar" hidden><img id="avatar-fija" src="avatar/reposo.jpeg" alt=""></div>
+  <div id="izquierda">
+    <section id="turnos" class="panel" hidden>
+      <h2>Turnos <span id="turnos-total"></span></h2>
+      <ol id="turnos-lista"></ol>
+      <p id="turnos-mas" hidden></p>
+    </section>
+    <!-- Aparece unos segundos cuando alguien que ya usó su pregunta gratis vuelve a preguntar sin regalo -->
+    <section id="cartel" hidden>
+      <p id="cartel-quien"></p>
+      <p>Agotó su pregunta gratis. ¡Envía un regalo para responderte!</p>
+    </section>
+  </div>
 
   <section id="menu" class="panel" hidden>
     <h2>Lecturas</h2>
@@ -39,6 +49,9 @@
       <p id="voz-texto"></p>
     </div>
   </section>
+
+  <!-- Solo aparece si el navegador no deja sonar la voz sin un clic (no pasa en LIVE Studio ni OBS) -->
+  <button id="sonido" type="button" hidden>🔊 Activar sonido</button>
 
   <!-- PROVISIONAL: Caro reemplaza este aviso por su texto legal. -->
   <p id="aviso">Las lecturas son una guía de entretenimiento y crecimiento personal; no sustituyen asesoría

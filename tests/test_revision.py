@@ -53,7 +53,8 @@ def test_resumen_por_persona(bita):
     r = revision.resumen(revision.leer(NOMBRE, bita))
     p = {x["user"]: x for x in r["personas"]}
     assert p["migdalia"]["estado"] == "Leída" and p["migdalia"]["lecturas"] == 1 and not p["migdalia"]["alerta"]
-    repetido = p["migdalia"]["eventos"][-1]
+    repetido = [e for e in p["migdalia"]["eventos"] if e["tipo"] == "comentario"][-1]
+    assert p["migdalia"]["eventos"][-1]["tipo"] == "gratis_agotada"       # se le avisó que ya usó su gratis
     assert repetido["veces"] == 3 and repetido["situacion"] == "Esa pregunta ya se le respondió: se lee de nuevo solo si regala"
     assert p["shirley"]["estado"] == "Salió de la fila sin dar la fecha"
     assert [e["tipo"] for e in p["shirley"]["eventos"]] == ["comentario", "pide_fecha", "sin_fecha"]

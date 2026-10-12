@@ -6,7 +6,7 @@ def test_emergencia_medica_menor():
 
 def test_embarazo():
     r = evaluar("Soy Verónica quedare embarazada pronto")
-    assert r.categoria == "embarazo" and r.accion == "saltar"
+    assert r.categoria == "embarazo" and r.accion == "con_regalo"
 
 def test_posible_menor():
     r = evaluar("Mi papa me obligará a terminar con mi novio o aceptará que este con el?")

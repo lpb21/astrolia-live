@@ -31,6 +31,37 @@ PIDE_FECHA = (
      "sacar las cartas."),
 )
 
+# Ya usó su pregunta gratis y vuelve a preguntar sin regalo. Se dice una vez por persona, junto con el
+# cartel del overlay. Primera frase: una persona; segunda: varias.
+GRATIS_AGOTADA = (
+    ("{n}, ya usaste tu pregunta gratis de este live. Envía un regalo y te leo esta también.",
+     "{n}, ya usaron su pregunta gratis de este live. Envíen un regalo y les leo esta también."),
+    ("{n}, tu pregunta gratis ya te la respondí. Con un regalo te abro las cartas para esta.",
+     "{n}, su pregunta gratis ya se la respondí. Con un regalo les abro las cartas para esta."),
+)
+
+# Preguntas de salud: no se leen las cartas; se orienta con cariño a cuidarse e ir al médico.
+SALUD = (
+    "{n}, lo que me cuentas merece más atención de la que pueden darte las cartas. Quererse también es "
+    "cuidarse: busca a un médico y sal de dudas. Aquí estoy para acompañarte en lo demás.",
+    "{n}, con la salud prefiero no adivinar. Lo más amoroso que se puede hacer es ir al doctor y que te "
+    "expliquen bien qué pasa; si es urgente, que sea hoy mismo. Te mando mucha luz para ese paso.",
+    "{n}, hay preguntas que las cartas no deben responder, y esta es una. Date ese cariño de consultar "
+    "con un médico y no lo dejes para después. Que Dios te acompañe en eso.",
+)
+
+# Preguntó por un tema que solo se lee con regalo (embarazo) y no ha enviado lo suficiente.
+PIDE_ROSQUILLA = (
+    "{n}, las preguntas de embarazo las leo con una rosquilla. Envíala y te respondo con las cartas.",
+    "{n}, ese tema lo vemos con calma: envía una rosquilla y te leo esa pregunta.",
+)
+
+# Regaló y dijo que mandó la pregunta por mensaje privado.
+ESCRIBE_EN_CHAT = (
+    "{n}, por el interno no alcanzo a leerte durante el live. Escríbeme tu pregunta aquí en el chat y te la leo.",
+    "{n}, los mensajes privados no los veo mientras estoy en vivo. Déjame tu pregunta aquí en el chat, con tu fecha de nacimiento.",
+)
+
 # La fecha que dio era de la otra persona (por el nombre de la cuenta o porque lo contestó).
 PIDE_FECHA_PROPIA = (
     "{n}, ya tengo la fecha de la otra persona; me falta la tuya, con día, mes y año.",

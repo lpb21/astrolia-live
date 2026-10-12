@@ -298,10 +298,10 @@ def test_afirmacion_sin_senal_vale_con_regalo_pero_no_para_la_gratis():
     for t in ["mi papá le es infiel a mi mamá", "hoy es mi cumpleaños", "ya dejalo, ya le respondiste"]:
         assert es_pregunta(t) and not parece_pregunta(t), t
     c = Cola(espera_fecha=None, espera_gratis=CERO)
-    c.procesar(ev("comment", "a", 0, texto="hoy es mi cumpleaños"))
+    c.procesar(ev("comment", "a", 0, texto="mi papá le es infiel a mi mamá"))
     assert c.pendientes(T0 + timedelta(seconds=1)) == []
     c.procesar(ev("gift", "a", 2, regalo="Rose", valor=1))
-    assert c.pendientes(T0 + timedelta(seconds=3))[0].pregunta == "hoy es mi cumpleaños"
+    assert c.pendientes(T0 + timedelta(seconds=3))[0].pregunta == "mi papá le es infiel a mi mamá"
 
 def test_nombre_con_fecha_no_es_pregunta():
     c = Cola(espera_gratis=CERO)
@@ -403,3 +403,58 @@ def test_la_deuda_de_pregunta_vence_a_los_cinco_minutos():
     c.cerrar("lali")
     c.procesar(ev("comment", "lali", 500, texto="me va a buscar este mes?"))
     assert all(i.valor == 0 for i in c.pendientes(T0 + timedelta(seconds=520)))
+
+
+# ---------- live del 11 de octubre (hadaencantadatarot) ----------
+def test_pregunta_que_empieza_con_arroba_no_es_una_mencion():
+    c = Cola(espera_fecha=None)
+    c.procesar(ev("gift", "maky", 0, regalo="Singing Mushroom", valor=99))
+    c.procesar(ev("comment", "maky", 29, texto="@magaly Alcibar 29/4/85 y Saúl Peña cuáles son sus verdaderas intenciones ahora conmigo"))
+    [item] = c.pendientes(T0 + timedelta(seconds=30))
+    assert item.pregunta.startswith("magaly Alcibar") and item.dato.signo == "Tauro"
+    assert c.sin_mencion("@que pasa con mi esposo 04/06/90@kreativa@gmail.com") == "que pasa con mi esposo 04/06/90"
+    assert c.sin_mencion("@@hector sonora 19 feb 94. le llegara karma?") == "hector sonora 19 feb 94. le llegara karma?"
+
+def test_mencion_a_otra_persona_del_chat_se_ignora():
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    c.procesar({**ev("comment", "lali", 0, texto="hola a todos"), "nickname": "Lalita Vergara"})
+    assert c.sin_mencion("@Lalita Vergara comoo así, si te ves re joven") is None
+    c.procesar(ev("comment", "abc", 5, texto="@Lalita Vergara comoo así, si te ves re joven"))
+    assert c.pendientes(T0 + timedelta(seconds=6)) == []
+
+def test_charla_antes_del_regalo_no_se_vuelve_la_pregunta():
+    for charla in ["De acuerdo totalmente", "La última 🙈🙈 ya bella jejeje", "yo FALTO", "Si acciones fue horrible el pasado",
+                   "No yo tampoco quiero algo serio", "Si poner límites"]:
+        c = Cola(espera_fecha=None)
+        c.procesar(ev("comment", "m", 0, texto=charla))
+        c.procesar(ev("gift", "m", 10, regalo="Confetti", valor=100))
+        [item] = c.pendientes(T0 + timedelta(seconds=11))
+        assert item.pregunta == "" and c.falta(item) == ["pregunta"], charla
+
+def test_preguntas_sobre_el_live_no_gastan_la_gratis():
+    for t in ["Mi pregunta te salío?", "La lista está muy larga?", "mi pregunta salio", "te envie la pregunta al interno",
+              "Voy a enviarte otra pregunta y otra rosquilla", "¡Nuestra comunidad acaba de subir de r",
+              "Bonito domingo bella ✨ gracias"]:
+        assert not es_pregunta(t), t
+    for t in ["mi pregunta es omar sequera 15 04 70 me es fiel", "Nancy Gómez Nuñez si me quiere 20 03 63",
+              "si me llegara acercar a natalie qué sentimientos en ella actuarían?", "no me busca, volverá?"]:
+        assert es_pregunta(t), t
+
+def test_otra_fecha_despues_de_dar_la_suya_es_de_la_otra_persona():
+    c = Cola()
+    c.procesar(ev("comment", "alf", 0, texto="Alfredo Álvarez 13/06/91 y Miguel Villa 11/11/03 quiere volver conmigo por amor?"))
+    c.procesar(ev("gift", "alf", 1, regalo="Singing Mushroom", valor=99))
+    c.tomar_siguiente(T0 + timedelta(seconds=2))
+    c.cerrar("alf")
+    c.procesar(ev("gift", "alf", 100, regalo="Singing Mushroom", valor=99))
+    c.procesar(ev("comment", "alf", 120, texto="Miguel Villa 11/11/03 El tiene una relación con Oscar Gil?"))
+    [item] = c.pendientes(T0 + timedelta(seconds=121))
+    assert item.dato.signo == "Géminis" and item.pareja.signo == "Escorpio" and c._datos["alf"].signo == "Géminis"
+
+
+def test_casos_del_live_indiodeluz():
+    from backend.cola import parece_pregunta
+    for t in ["hay preguntitas gratuitas??", "son gratis las preguntas?", "cómo es lo de la pregunta gratuita"]:
+        assert not es_pregunta(t), t
+    assert parece_pregunta("Soy segundo 87 mi pareja deverdad me quiso y por q se terminó mi relación")
+    assert parece_pregunta("mi pregunta gratis es si volverá Juan conmigo?")

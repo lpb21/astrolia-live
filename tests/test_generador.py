@@ -28,7 +28,7 @@ def test_devuelve_el_json_de_la_lectura():
     c = ClienteFalso(json.dumps({"sensible": False, "categoria": "", "respuesta": "Tu carta es El Sol."}))
     assert generar(c) == {"sensible": False, "categoria": "", "respuesta": "Tu carta es El Sol."}
     [p] = c.pedidos
-    assert p["model"] == "claude-opus-5-5" and p["system"] == "sistema" and p["messages"] == PROMPT["messages"]
+    assert p["model"] == "claude-sonnet-5-5" and p["system"] == "sistema" and p["messages"] == PROMPT["messages"]
     assert p["output_config"] == {"effort": "low", "format": FORMATO}
     assert p["fallbacks"] == "default" and p["betas"] == ["server-side-fallback-2026-07-01"]
     assert "thinking" not in p and "temperature" not in p        # este modelo los rechaza
@@ -49,3 +49,22 @@ def test_respuesta_cortada_o_vacia_es_error():
 def test_modelo_por_variable_de_entorno(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     assert GeneradorClaude(ClienteFalso()).modelo == "claude-sonnet-5-5"
+    
+def test_modelo_segun_valor():
+    c = ClienteFalso(json.dumps({"sensible": False, "categoria": "", "respuesta": "ok"}))
+    g = GeneradorClaude(c)
+    for valor in (0, 1, 9, 10, 500):
+        asyncio.run(g.generar({**PROMPT, "valor": valor}))
+    assert [p["model"] for p in c.pedidos] == ["claude-haiku-5-5"] * 3 + ["claude-sonnet-5-5"] * 2
+
+def test_limite_de_gasto_se_reconoce():
+    import anthropic, httpx
+    from backend.generador import LimiteGasto
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    exc = anthropic.BadRequestError("You have reached your specified API usage limits.",
+                                    response=httpx.Response(400, request=req), body=None)
+    async def create(**kw):
+        raise exc
+    c = NS(beta=NS(messages=NS(create=create)))
+    with pytest.raises(LimiteGasto):
+        asyncio.run(GeneradorClaude(c).generar(PROMPT))

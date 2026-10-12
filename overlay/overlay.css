@@ -8,9 +8,12 @@
   --titulos: "Cinzel", "Trajan Pro", Georgia, serif;
   --texto: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
 
-  /* Zona libre de la interfaz de TikTok (arriba: perfil y clasificación; abajo: chat). */
+  /* Reparto de la pantalla. El CENTRO es del avatar (cara, torso, manos y gato): nada se dibuja
+     entre las dos columnas, desde --arriba hasta la mesa. Todo lo que se agregue va en la columna
+     izquierda (turnos, cartel), en la derecha (menú, boost) o en la franja de la mesa (cartas y
+     lectura). --arriba deja libre la barra superior de TikTok; --abajo, su barra de escribir. */
   --arriba: 335px;
-  --abajo: 585px;
+  --abajo: 130px;
   --margen: 26px;
   --columna: 296px;
 }
@@ -22,13 +25,23 @@ body.fondo { background: radial-gradient(120% 80% at 50% 35%, #4a2f7a 0%, #1b103
 #lienzo {
   position: absolute; left: 50%; top: 0;
   width: 1080px; height: 1920px;
-  transform-origin: top center;
-  transform: translateX(-50%) scale(var(--escala, 1));
+  /* zoom (y no transform: scale) para que el texto se dibuje nítido al tamaño final */
+  zoom: var(--escala, 1);
+  transform: translateX(-50%);
   font-family: var(--texto); color: var(--crema);
   font-size: 26px; line-height: 1.25;
 }
 
 [hidden] { display: none !important; }
+
+/* ---------- avatar (al fondo de todo) ---------- */
+#avatar { position: absolute; inset: 0; overflow: hidden; }
+#avatar img, #avatar video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+}
+#avatar video { opacity: 0; transition: opacity .45s ease; }
+#avatar video.visible { opacity: 1; }
 ol, ul { list-style: none; }
 
 .panel {
@@ -46,7 +59,16 @@ h2 {
 h2 span { color: var(--lila); letter-spacing: 0; }
 
 /* ---------- turnos (izquierda) ---------- */
-#turnos { position: absolute; left: var(--margen); top: var(--arriba); width: var(--columna); }
+#izquierda { position: absolute; left: var(--margen); top: var(--arriba); width: var(--columna);
+             display: flex; flex-direction: column; gap: 12px; }
+#cartel {
+  padding: 12px 14px; text-align: center; border-radius: 18px;
+  background: linear-gradient(160deg, rgb(92 14 30 / .92), rgb(54 8 22 / .88));
+  border: 2px solid #ff7d8f; box-shadow: 0 0 24px rgb(255 90 110 / .5), 0 10px 26px rgb(0 0 0 / .45);
+  font-size: 21px; line-height: 1.25; color: #ffe1e5; animation: entra .4s ease-out both;
+}
+#cartel-quien { font-weight: 800; font-size: 23px; color: #fff; margin-bottom: 4px; overflow-wrap: anywhere; }
+#cartel-quien::before { content: "⌛ "; }
 #turnos-lista { padding: 8px 14px 6px; counter-reset: turno; }
 #turnos-lista li {
   counter-increment: turno;
@@ -73,11 +95,11 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 
 /* ---------- boost de likes (arriba al centro, solo mientras corre la ronda) ---------- */
 #boost {
-  position: absolute; top: var(--arriba); left: calc(var(--margen) + var(--columna) + 14px);
-  right: calc(var(--margen) + var(--columna) + 14px); text-align: center;
+  position: absolute; right: var(--margen); top: var(--arriba); width: var(--columna); text-align: center;
   border-color: #ff8fb8; box-shadow: 0 0 28px rgb(255 110 170 / .55), 0 10px 30px rgb(0 0 0 / .45);
   animation: entra .4s ease-out both;
 }
+#menu.cede { display: none; }      /* el boost ocupa su lugar mientras dura la ronda */
 #boost h2 { color: #ffd0e2; border-color: rgb(255 143 184 / .45); font-size: 21px; letter-spacing: .08em; }
 #boost-reloj { display: block; margin-top: 8px; font: 800 54px/1 var(--texto); color: #fff; letter-spacing: 0; }
 #boost-regla { padding: 10px 14px 4px; font-size: 20px; color: var(--lila); text-wrap: balance; }
@@ -107,21 +129,51 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 
 #cartas { display: flex; justify-content: center; gap: 14px; width: 100%; perspective: 1400px; }
 #cartas:empty { display: none; }
-.carta { --ancho: 190px;      /* 1 o 2 cartas caben entre los paneles; desde 3 pasan por debajo */ width: var(--ancho); flex: none; text-align: center;
-         animation: voltea .6s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i) * .22s); }
+.carta { --ancho: 190px;      /* tamaño según cuántas cartas son; pueden tapar al gato, que se vean bien */
+         width: var(--ancho); flex: none; text-align: center; }
 #cartas[data-n="3"] .carta, #cartas[data-n="4"] .carta { --ancho: 155px; }
 #cartas[data-n="5"] .carta { --ancho: 150px; }
 #cartas[data-n="6"] .carta { --ancho: 140px; }
-#cartas[data-n="6"] .carta-posicion { font-size: 16px; padding: 4px 8px; }
+#cartas[data-n="5"] .carta-posicion { font-size: 19px; }
+#cartas[data-n="6"] .carta-posicion { font-size: 17px; letter-spacing: .05em; }
+#cartas[data-n="5"] .carta-pie { font-size: 16px; }
+#cartas[data-n="6"] .carta-pie { font-size: 15px; white-space: nowrap; }      /* en una línea, placas parejas */
+#cartas[data-n="5"] .carta-rotulo, #cartas[data-n="6"] .carta-rotulo { padding: 6px 2px 7px; margin-top: 8px; }
+/* La carta llega boca abajo y se voltea cuando la lectura llega a ella (.revelada).
+   .carta-giro es lo que gira; adentro van el frente y el dorso, espalda con espalda. El rótulo queda
+   fuera del giro para que su texto no se vea borroso. */
+.carta-giro {
+  position: relative; width: var(--ancho); aspect-ratio: 3 / 5;
+  transform-style: preserve-3d; transform: rotateY(180deg);
+  transition: transform .8s cubic-bezier(.3, .7, .2, 1);
+  animation: reparte .5s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * .18s);
+}
+.carta.revelada .carta-giro { transform: rotateY(0deg); }
+.carta.revelada.activa .carta-giro { transform: translateY(-8px) scale(1.03); }
 .carta-cara {
-  width: var(--ancho); aspect-ratio: 3 / 5; border-radius: 12px; overflow: hidden;
+  position: absolute; inset: 0; border-radius: 12px; overflow: hidden;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
   border: 3px solid var(--oro); box-shadow: 0 10px 24px rgb(0 0 0 / .55);
-  transition: transform .4s ease, box-shadow .4s ease;
+  transition: box-shadow .4s ease;
 }
 .carta-cara img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.carta.activa .carta-cara { transform: translateY(-8px) scale(1.03);
-                            box-shadow: 0 0 0 3px #fff3cf, 0 0 34px 6px rgb(236 200 120 / .75); }
-/* Carta dibujada, cuando falta su imagen en tarot/img/ */
+.carta.revelada.activa .carta-cara { box-shadow: 0 0 0 3px #fff3cf, 0 0 34px 6px rgb(236 200 120 / .75); }
+/* Dorso: azul noche con estrella dorada, como las cartas dibujadas en la mesa del avatar */
+.carta-dorso {
+  transform: rotateY(180deg);
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(236 200 120 / .22), transparent 46%),
+    repeating-linear-gradient(45deg, rgb(255 255 255 / .035) 0 6px, transparent 6px 12px),
+    linear-gradient(165deg, #2d2752, #15102e);
+  box-shadow: 0 10px 24px rgb(0 0 0 / .55), inset 0 0 0 6px #15102e, inset 0 0 0 8px var(--oro-suave);
+}
+.carta-dorso::before { content: "✦"; font-size: calc(var(--ancho) * .46); line-height: 1; color: var(--oro);
+                       text-shadow: 0 0 18px rgb(236 200 120 / .6); }
+/* Mientras está boca abajo, el rótulo muestra solo la posición; el nombre aparece al voltearla */
+.carta-pie { transition: opacity .5s ease .35s; }
+.carta:not(.revelada) .carta-pie { opacity: 0; }
+/* Carta dibujada, cuando falta su imagen en tarot/img_live/ y en tarot/img/ */
 .carta-cara.sin-imagen {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10%;
   padding: 8%;
@@ -133,22 +185,36 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 .carta-simbolo { font-size: calc(var(--ancho) * .34); line-height: 1; color: var(--oro); }
 .carta-nombre { font: 700 calc(var(--ancho) * .115)/1.15 var(--titulos); letter-spacing: .04em;
                 text-transform: uppercase; text-wrap: balance; }
-.carta-posicion {
-  display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px;
-  font: 700 19px/1.1 var(--titulos); letter-spacing: .1em; text-transform: uppercase;
-  color: var(--oro); background: rgb(var(--noche) / .88); white-space: nowrap;
+/* Rótulo bajo la carta: placa opaca con la posición y el nombre, legible sobre cualquier fondo */
+.carta-rotulo {
+  margin-top: 10px; padding: 8px 6px 9px; border-radius: 12px;
+  background: rgb(var(--noche) / .97); border: 2px solid var(--oro-suave);
+  box-shadow: 0 6px 16px rgb(0 0 0 / .5);
+  animation: entra .35s ease-out backwards; animation-delay: calc(var(--i) * .22s + .3s);
+  transition: border-color .4s ease;
 }
-.carta-pie { display: block; margin-top: 5px; font-size: calc(var(--ancho) * .115); font-weight: 700;
-             line-height: 1.1; text-shadow: 0 1px 4px #000, 0 0 8px #000; text-wrap: balance; }
+.carta.activa .carta-rotulo { border-color: var(--oro); }
+.carta-posicion {
+  display: block; font: 700 22px/1.1 var(--titulos); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--oro); white-space: nowrap;
+}
+.carta-pie { display: block; margin-top: 5px; font-size: calc(var(--ancho) * .125); font-weight: 700;
+             line-height: 1.12; color: #fff; text-wrap: balance; }
 
 #voz { width: 100%; padding: 16px 28px 18px; text-align: center; animation: entra .4s ease-out both; }
 #voz-quien { font: 700 30px/1.15 var(--titulos); color: var(--oro); letter-spacing: .05em; }
 #voz-quien small { font: 600 21px var(--texto); color: var(--lila); letter-spacing: .02em; margin-left: 10px;
                    white-space: nowrap; }
 #voz-pregunta { margin-top: 8px; font-size: 24px; font-style: italic; color: var(--lila); }
-#voz-texto { margin-top: 14px; font-size: 31px; font-weight: 600; line-height: 1.3; text-wrap: pretty;
+#voz-texto { margin-top: 10px; font-size: 29px; font-weight: 600; line-height: 1.3; text-wrap: pretty;
              min-height: 2.6em; }
 #voz-texto.cambia { animation: entra .3s ease-out both; }
+
+#sonido {
+  position: absolute; left: 50%; top: 40px; transform: translateX(-50%);
+  font: 700 30px var(--texto); color: #1c0f3d; background: var(--oro); border: 0; border-radius: 999px;
+  padding: 16px 30px; cursor: pointer; box-shadow: 0 8px 22px rgb(0 0 0 / .5);
+}
 
 /* ---------- aviso legal ---------- */
 #aviso {
@@ -158,5 +224,5 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 }
 
 @keyframes entra { from { opacity: 0; transform: translateY(14px); } }
-@keyframes voltea { from { opacity: 0; transform: translateY(60px) rotateY(90deg); } }
+@keyframes reparte { from { opacity: 0; transform: translateY(70px) rotateY(180deg); } }
 @keyframes late { 50% { opacity: .25; } }

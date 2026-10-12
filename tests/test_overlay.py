@@ -73,3 +73,26 @@ def test_la_app_sirve_el_overlay():
     cliente = TestClient(app)
     assert cliente.get("/overlay/estado").json()["hablando"] is None
     assert "overlay.js" in cliente.get("/overlay/").text
+
+
+def test_la_carta_sale_de_img_live_y_si_falta_de_la_original(tmp_path):
+    from backend.overlay import _imagen
+    live, original = tmp_path / "img_live", tmp_path / "img"
+    live.mkdir(); original.mkdir()
+    (live / "la-luna.webp").write_bytes(b"x")
+    (original / "la-luna.jpg").write_bytes(b"x")
+    (original / "el-sol.jpg").write_bytes(b"x")
+    carpetas = (("cartas", live), ("cartas-originales", original))
+    assert _imagen("la-luna", carpetas) == "cartas/la-luna.webp"              # la preparada para el live
+    assert _imagen("el-sol", carpetas) == "cartas-originales/el-sol.jpg"      # aún sin preparar: la original
+    assert _imagen("la-torre", carpetas) is None                             # sin imagen: carta dibujada
+
+def test_la_app_sirve_las_cartas_preparadas():
+    from pathlib import Path
+    import pytest
+    from fastapi.testclient import TestClient
+    from backend.app import app
+    if not (Path(__file__).resolve().parent.parent / "tarot" / "img_live" / "la-luna.webp").is_file():
+        pytest.skip("sin cartas preparadas; corre python -m tools.preparar_cartas")
+    r = TestClient(app).get("/overlay/cartas/la-luna.webp")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/webp"

@@ -111,6 +111,8 @@ async def on_disconnect(e): log.warning("Desconectado")
 @client.on(CommentEvent)
 async def on_comment(e: CommentEvent):
     identidad = getattr(e, "user_identity", None)
+    if e.user.display_id == client.unique_id or (identidad is not None and identidad.is_anchor):
+        return                      # lo que escribe la propia cuenta del live no es una consulta
     emit(LiveEvent("comment", e.user.display_id, e.user.nickname,
                    texto=limpiar(e.content), msg_id=e.common.msg_id,
                    seguidor=bool(identidad.is_follower_of_anchor) if identidad is not None else None))
