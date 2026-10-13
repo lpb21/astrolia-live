@@ -1,5 +1,6 @@
 from __future__ import annotations
-from datetime import datetime
+from collections import deque
+from datetime import datetime, timedelta
 from pathlib import Path
 from astro.signos import sin_fechas
 from backend.cola import Cola
@@ -12,7 +13,27 @@ TAROT = Path(__file__).parent.parent / "tarot"
 CARPETAS = (("cartas", TAROT / "img_live"), ("cartas-originales", TAROT / "img"))
 FORMATOS = (".webp", ".png", ".jpg", ".jpeg")
 MAX_TURNOS = 5
+# Regalos que tienen animación propia del avatar (overlay: videos/<clip>.mp4), por su nombre en TikTok
+CLIP_REGALO = {"rose": "rosa", "doughnut": "rosquilla"}
+VIGENCIA_EFECTO = timedelta(seconds=12)      # pasado ese rato ya no se anima: llegaría fuera de lugar
 MAX_PREGUNTA = 110
+
+
+class Efectos:
+    """Animaciones de regalo pendientes de mostrarse. El overlay las ve en cada consulta y no repite un id."""
+
+    def __init__(self):
+        self._lista: deque[dict] = deque(maxlen=30)
+        self._n = 0
+
+    def regalo(self, nombre: str, ts: datetime) -> None:
+        clip = CLIP_REGALO.get(nombre.strip().lower())
+        if clip:
+            self._n += 1
+            self._lista.append({"id": self._n, "clip": clip, "ts": ts})
+
+    def recientes(self, ahora: datetime) -> list[dict]:
+        return [{"id": e["id"], "clip": e["clip"]} for e in self._lista if ahora - e["ts"] <= VIGENCIA_EFECTO]
 
 
 def _imagen(carta_id: str, carpetas=CARPETAS) -> str | None:
@@ -31,7 +52,7 @@ def _pregunta(texto: str) -> str:
 
 
 def _hablando(s: Salida, carpetas) -> dict:
-    lectura = s.tipo == "lectura"      # solo la lectura muestra pregunta y cartas
+    lectura = s.tipo in ("lectura", "carta_momento")      # solo estas muestran cartas (y la lectura, pregunta)
     return {
         "clave": f"{s.user}|{s.tipo}|{s.ts.isoformat()}",
         "tipo": s.tipo,
@@ -57,9 +78,12 @@ def vista(cola: Cola, worker: Worker, ahora: datetime, carpeta: Path | None = No
     return {
         "pausado": worker.pausado,
         "palabras_por_seg": worker.palabras_por_seg,
-        "menu": [{"monedas": n.minimo, "nombre": n.nombre, "cartas": len(n.posiciones)}
+        "menu": [{"monedas": n.minimo, "regalo": n.regalo, "nombre": n.nombre, "cartas": len(n.posiciones)}
                  for n in reversed(NIVELES) if n.en_menu],
         "turnos": [{"nickname": i.nickname, "nivel": nivel_para(i.valor).nombre, "falta": cola.falta(i),
+                    # segundos que le quedan para escribir su pregunta a quien regaló sin preguntar
+                    "restante": (max(round((cola.espera_pregunta - (ahora - i.ts)).total_seconds()), 0)
+                                 if not i.pregunta else None),
                     "signo": i.dato.signo if i.dato else "", "pase": i.prioridad}
                    for i in pendientes[:MAX_TURNOS]],
         "en_cola": len(pendientes),

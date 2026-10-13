@@ -74,7 +74,7 @@
 const $ = (id) => document.getElementById(id);
 const ICONOS = { comentario: "💬", regalo: "🎁", follow: "➕", lectura: "🔮", mensaje_fijo: "✋", pide_fecha: "📅",
                  pide_pregunta: "❓", pide_regalo: "🍩", gratis_agotada: "⌛", boost: "⚡", saltado: "⏭", sin_fecha: "⌛", pregunta_tardia: "↩" };
-const SISTEMA = new Set(["lectura", "mensaje_fijo", "pide_fecha", "pide_pregunta", "pide_regalo", "gratis_agotada", "boost", "pregunta_tardia"]);
+const SISTEMA = new Set(["lectura", "mensaje_fijo", "pide_fecha", "pide_pregunta", "barajando", "pide_regalo", "gratis_agotada", "boost", "pregunta_tardia"]);
 const MALO = new Set(["saltado", "sin_fecha"]);
 let datos = { personas: [], totales: {} };
 let abiertas = location.hash === "#todas";

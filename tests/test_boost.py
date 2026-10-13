@@ -109,7 +109,7 @@ def test_el_worker_anuncia_la_ronda_y_le_da_el_turno_a_quien_gana():
     ev(c, "gift", "pedro", 31, regalo="Leon", valor=100)
     assert correr(w, 65)
     anuncio = next(s for s in w.salidas if s.tipo == "boost" and "ganó" in s.texto)
-    assert "Ana ganó el boost con 120 likes" in anuncio.texto and "pasa de primera" in anuncio.texto
+    assert "Ana ganó el boost con 120 tap tap" in anuncio.texto and "pasa de primera" in anuncio.texto
     correr(w, 66)
     assert [s.nickname for s in w.salidas if s.tipo == "lectura"] == ["Rica", "Ana", "Pedro"]   # Ana pasó sin regalar
 
@@ -123,3 +123,20 @@ def test_ganador_sin_pregunta_recibe_la_invitacion_y_el_pase_se_ve_en_el_overlay
     assert "Escribe tu pregunta" in w.salidas[-1].texto
     ev(c, "comment", "ana", 70, texto="le gusto a Pedro o no?")
     assert vista(c, w, t(71))["turnos"][0]["pase"] is True
+
+
+def test_quien_ya_gano_queda_fuera_de_las_siguientes_rondas_y_de_la_lista():
+    # chole30767 ganó tres rondas seguidas en el live del 13-oct-2026
+    b = Boost(duracion=timedelta(seconds=60), cada=timedelta(minutes=5))
+    b.iniciar(t(0))
+    b.like("chole", "Chole", 150, t(10))
+    b.like("lu", "Lu", 40, t(20))
+    assert b.cerrar(t(61)).user == "chole"
+    b.iniciar(t(400))
+    b.like("chole", "Chole", 300, t(410))
+    b.like("lu", "Lu", 20, t(420))
+    assert b.vista(t(430))["top"] == [{"nickname": "Lu", "likes": 20}]
+    assert b.cerrar(t(461)).user == "lu"
+    b.iniciar(t(800))
+    b.like("chole", "Chole", 99, t(810))
+    assert b.cerrar(t(861)) is None                                    # solo tocaron quienes ya habían ganado

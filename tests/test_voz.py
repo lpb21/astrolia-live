@@ -49,7 +49,9 @@ def test_la_lectura_sale_en_trozos_con_su_audio():
     c, w = lectura(voz)
     s = w.salidas[-1]
     assert s.tipo == "lectura" and s.completo and [t["texto"] for t in s.trozos] == trocear(LARGA)
-    assert voz.pedidos == trocear(LARGA) and all(t["audio"] in w.audios and t["dur"] > 0 for t in s.trozos)
+    assert voz.pedidos[0].startswith("Barajando para U")            # anuncia el turno mientras la IA escribe
+    assert voz.pedidos[1:] == trocear(LARGA) and all(t["audio"] in w.audios and t["dur"] > 0 for t in s.trozos)
+    assert [x.tipo for x in w.salidas] == ["barajando", "lectura"]
     w.hablando = s
     h = vista(c, w, T0 + timedelta(seconds=2))["hablando"]
     assert h["completo"] and h["trozos"][0] == {"texto": trocear(LARGA)[0], "audio": f"audio/{s.trozos[0]['audio']}.wav",
@@ -67,10 +69,11 @@ def test_los_avisos_tambien_suenan():
 def test_si_la_voz_falla_al_empezar_se_sigue_sin_audio():
     c, w = lectura(VozFalsa(falla_en=0))
     s = w.salidas[-1]
+    assert [x.tipo for x in w.salidas] == ["barajando", "lectura"]
     assert s.tipo == "lectura" and s.trozos == [] and c.historial[-1].estado == "hecho"
 
 def test_si_falla_a_la_mitad_queda_lo_que_alcanzo_a_sonar():
-    c, w = lectura(VozFalsa(falla_en=2))
+    c, w = lectura(VozFalsa(falla_en=3))              # el anuncio del turno y dos trozos de la lectura
     s = w.salidas[-1]
     assert len(s.trozos) == 2 and s.completo and c.historial[-1].estado == "hecho"     # completo: ya no vienen más
 
@@ -87,3 +90,47 @@ def test_la_app_entrega_el_audio():
     assert r.status_code == 200 and r.content == b"RIFFdatos" and r.headers["content-type"] == "audio/wav"
     assert cliente.get("/overlay/audio/no-existe.wav").status_code == 404
     del m.worker.audios["a999"]
+
+
+def _wav(muestras, hz=22050):
+    import io, wave, array
+    b = io.BytesIO()
+    with wave.open(b, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(hz)
+        w.writeframes(array.array("h", muestras).tobytes())
+    return b.getvalue()
+
+def test_recortar_silencio_deja_solo_un_respiro():
+    from backend.voz import recortar_silencio, AIRE_ANTES, AIRE_DESPUES
+    hz = 22050
+    voz = [8000, -8000] * (hz // 2)                                  # 1 s de sonido
+    datos, dur = recortar_silencio(_wav([0] * hz + voz + [0] * (2 * hz)))    # 1 s de silencio antes y 2 s después
+    assert 1.0 <= dur <= 1.0 + AIRE_ANTES + AIRE_DESPUES + 0.02
+    assert datos[:4] == b"RIFF"
+    solo_silencio, d = recortar_silencio(_wav([0] * hz))
+    assert d == 1.0                                                  # sin sonido no se toca
+
+def test_frase_larga_no_se_corta_en_las_comas_salvo_que_sea_enorme():
+    normal = "Me preguntas si él vuelve, y lo primero que aparece en tu pasado, que fue hermoso, es el Seis de Copas, donde hubo ternura real."
+    assert trocear(normal) == [normal]
+    enorme = "uno dos tres cuatro cinco seis siete ocho nueve diez, " * 5 + "y fin."
+    assert len(trocear(enorme)) >= 2
+
+def test_un_saludo_corto_se_une_a_la_frase_siguiente():
+    t = trocear("Hola, Ana. Me preguntas si él vuelve, y lo primero que aparece en tu pasado es el Seis de Copas, con ternura.")
+    assert len(t) == 1
+
+def test_la_voz_adelanta_trozos_para_no_dejar_silencios():
+    class VozLenta(VozFalsa):
+        ritmo = 0.9                                                  # casi tan lenta como el audio
+    voz = VozLenta()
+    c, w = lectura(voz)
+    assert w.salidas[-1].completo and len(voz.pedidos) == 1 + len(trocear(LARGA))
+
+
+def test_nombre_decible():
+    from backend.voz import nombre_decible
+    assert nombre_decible("🪐♥️Yuli Triana💫🍃") == "Yuli Triana"
+    assert nombre_decible("𝓐𝓷𝓭𝓻𝓮𝓲𝓽𝓪🦋") == "Andreita"
+    assert nombre_decible("🖤") == "corazón" and nombre_decible("✨✨ 123 ✨") == "corazón"
+    assert nombre_decible("🖤", "") == "" and nombre_decible("U") == "U"

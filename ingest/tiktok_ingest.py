@@ -1,4 +1,4 @@
-import os, logging, asyncio
+import functools, os, logging, asyncio
 from datetime import datetime
 from pathlib import Path
 import dataclasses
@@ -102,13 +102,35 @@ def emit(ev: LiveEvent):
     _tareas.add(t)
     t.add_done_callback(_tareas.discard)
 
+def avisar_conexion(conectado: bool):
+    """Le cuenta al backend si hay live: sin live, la voz deja de rellenar el silencio."""
+    ev = LiveEvent("conexion", "", "", texto="conectado" if conectado else "desconectado")
+    t = asyncio.get_running_loop().create_task(_enviar(ev))
+    _tareas.add(t)
+    t.add_done_callback(_tareas.discard)
+
 @client.on(ConnectEvent)
-async def on_connect(e): log.info(f"Conectado a @{e.unique_id}")
+async def on_connect(e):
+    log.info(f"Conectado a @{e.unique_id}")
+    avisar_conexion(True)
 
 @client.on(DisconnectEvent)
 async def on_disconnect(e): log.warning("Desconectado")
 
+def con_usuario(manejador):
+    """TikTok a veces manda eventos sin datos de quién los hizo (sobre todo entradas al live). Esos se
+    descartan aquí; sin esto cada uno deja un error largo en la consola."""
+    @functools.wraps(manejador)
+    async def envoltura(e):
+        usuario = getattr(e, "user", None)
+        if usuario is None or not getattr(usuario, "display_id", ""):
+            return
+        await manejador(e)
+    return envoltura
+
+
 @client.on(CommentEvent)
+@con_usuario
 async def on_comment(e: CommentEvent):
     identidad = getattr(e, "user_identity", None)
     if e.user.display_id == client.unique_id or (identidad is not None and identidad.is_anchor):
@@ -118,6 +140,7 @@ async def on_comment(e: CommentEvent):
                    seguidor=bool(identidad.is_follower_of_anchor) if identidad is not None else None))
 
 @client.on(GiftEvent)
+@con_usuario
 async def on_gift(e: GiftEvent):
     log.debug(f"[RACHA] {e.user.display_id} {e.gift.name} x{e.repeat_count} "
               f"streakable={e.gift.streakable} streaking={e.streaking}")
@@ -127,14 +150,17 @@ async def on_gift(e: GiftEvent):
                    regalo=e.gift.name, valor=e.gift.diamond_count * e.repeat_count, msg_id=e.common.msg_id))
 
 @client.on(LikeEvent)
+@con_usuario
 async def on_like(e: LikeEvent):
     emit(LiveEvent("like", e.user.display_id, e.user.nickname, valor=e.count, msg_id=e.common.msg_id))
 
 @client.on(JoinEvent)
+@con_usuario
 async def on_join(e: JoinEvent):
     emit(LiveEvent("join", e.user.display_id, e.user.nickname, msg_id=e.common.msg_id))
 
 @client.on(FollowEvent)
+@con_usuario
 async def on_follow(e: FollowEvent):
     emit(LiveEvent("follow", e.user.display_id, e.user.nickname, msg_id=e.common.msg_id))
     #pass
@@ -149,6 +175,7 @@ async def main():
             log.info(f"[RECONEXION] @{client.unique_id} no está en vivo, reintento en 30 s")
         except Exception as exc:
             log.error(f"[RECONEXION] error {exc!r}, reintento en 30 s")
+        avisar_conexion(False)              # terminó, no está en vivo o se cayó: el backend deja de rellenar
         await asyncio.sleep(30)
 
 if __name__ == "__main__":

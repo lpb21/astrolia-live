@@ -2,20 +2,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re, unicodedata
 
-# acción: "saltar" | "mensaje_fijo" | "con_regalo" | "permitir"
+# acción: "saltar" | "mensaje_fijo" | "con_regalo" | "breve" | "invitar" | "permitir"
 ACCIONES = {
     "crisis": "mensaje_fijo",
     "salud": "mensaje_fijo",
-    "embarazo": "con_regalo",      # se lee solo con un regalo de MINIMO monedas o más
+    "embarazo": "mensaje_fijo",    # no se lee en el live: la voz invita a escribir al DM, sin decir la palabra
     "menor": "saltar",
     "violencia": "mensaje_fijo",
     "brujeria": "saltar",
-    "dinero_legal": "saltar",
+    "dinero_legal": "breve",       # temas legales: se lee, pero solo un sí o no muy corto
+    "compatibilidad": "invitar",   # sin regalo: la voz invita a la sinastría por DM; con regalo se lee
     "acusacion": "saltar",
+    "paternidad": "saltar",        # de quién es un hijo: no lo deciden las cartas y afecta a terceros
 }
 
-# Temas que se leen solo desde cierto regalo (30 monedas = una rosquilla/Doughnut)
-MINIMO = {"embarazo": 30}
+# Temas que se leen solo desde cierto regalo, en monedas. Hoy ninguno: embarazo pasó a ir por DM.
+MINIMO: dict[str, int] = {}
 
 MENSAJES = {
     "crisis": "Si estás pasando por un momento muy difícil, busca ahora a alguien de confianza "
@@ -29,21 +31,30 @@ MENSAJES = {
 # orden = prioridad: la primera categoría que coincide gana
 PATRONES: list[tuple[str, re.Pattern]] = [
     ("crisis", re.compile(r"suicid|matarme|quitarme la vida|no quiero vivir|hacerme dano|cortarme|morirme")),
-    ("salud", re.compile(r"desma[yl]|corazon (le |me )?late|enferm|hospital|sintoma|diagnost|"
+    ("salud", re.compile(r"desma[yl]|corazon (le |me )?late|enferm(?!er[ao]s?\b|eria\b)|hospital|sintoma|diagnost|"
                          r"cirugia|convulsi|tumor|dolor(es)? (de|en)\b|me duele|quimio|radioterapia|metastasis|"
                          r"\bmi salud\b|\bde salud\b|\basma\b|disnea|diabet|infarto")),
     ("embarazo", re.compile(r"embaraz|aborto|aborta|sera (mama|papa)\b|nena o varon|varon o (nena|nina)|nino o nina")),
     ("violencia", re.compile(r"me pega|me golpea|maltrat|abus|me amenaza|violencia|corre peligro|en peligro\b")),
     ("menor", re.compile(r"\btengo 1[0-7] anos|\bmi (papa|mama|papi|mami) (me|no me)|colegio|"
                          r"\bgrado\b|mis papas")),
-    ("brujeria", re.compile(r"brujeria|hechizo|amarre|le hizo (un )?trabajo|me hicieron (un )?trabajo|"
+    ("brujeria", re.compile(r"brujeria|\bbruj[ao]s?\b|\bvudu\b|\bbudu\b|\bbuddu\b|mal de ojo|hechizo|amarre|le hizo (un )?trabajo|me hicieron (un )?trabajo|"
                             r"le hicieron (un )?trabajo|endulzamiento")),
     # Señalar a una persona como culpable de un robo o un chisme no lo deciden las cartas
     ("acusacion", re.compile(r"quien (fue|me robo|me lo robo|lo hizo|me hizo)|quienes? (son|fueron)\b|"
                              r"me robaron|me robo\b|me quitaron (un |el |mi |la |una )?(dinero|plata|celular|cartera)")),
+    # "la niña que tengo es de Luis", "¿de quién es el bebé?", "¿él es el papá de mi hijo?"
+    ("paternidad", re.compile(r"\b(nin[oa]|bebe|bb|hij[oa]|criatura)\b.{0,25}\b(si )?(es|sera|son) "
+                              r"(hij[oa] de|mi[oa]\b|suy[oa]\b|de (el|ella|otro|quien|mi (ex|esposo|marido|novio|pareja))\b)|"
+                              r"\b(nin[oa]|bebe|bb|hij[oa]|criatura) (que|q) (tengo|espero|tuve|voy a tener) (si )?es de\b|"
+                              r"de quien (es|sera) (el|la|mi|este|esta|ese|esa) (nin[oa]|bebe|bb|hij[oa])|"
+                              r"\b(es|sera) (el|su|la) (papa|padre|mama|madre) de (mi|el|la|ese|esa|este|esta) (hij[oa]|nin[oa]|bebe)|"
+                              r"\bpaternidad\b|prueba de adn")),
+    # "entre libra y escorpión somos compatibles?": la compatibilidad de verdad es una sinastría
+    ("compatibilidad", re.compile(r"compatib|sinastria")),
     ("dinero_legal", re.compile(r"\blegal(es)?\b|notari|herencia|\bdemanda\b|\bdemandar|"
                                 r"(?<!perdio el )(?<!perdi el )(?<!pierde el )\bjuicio\b|"
-                                r"abogad|loteria|invertir|inversion|(?<!sin )\bembarg|divorcio")),
+                                r"abogad|(?<!sin )\bembarg|divorcio")),
 ]
 
 # "cáncer" es signo o enfermedad según lo que lo rodea; se decide por cada aparición

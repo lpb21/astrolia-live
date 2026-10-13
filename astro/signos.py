@@ -20,16 +20,20 @@ GLIFOS = {"♈": "Aries", "♉": "Tauro", "♊": "Géminis", "♋": "Cáncer", "
 
 # DD/MM/AA con los separadores que usa la gente en el chat, incluido el apóstrofo: 30'06'08.
 # El año puede venir pegado a la palabra siguiente ("30'06'08Puedes decirme").
-_SEP = r"\s*[/.\-_ ;'’´`]\s*"
-FECHA_NUM = re.compile(r"\b(\d{1,2})" + _SEP + r"(\d{1,2})" + _SEP + r"(\d{4}|\d{2})(?!\d)")
+_SEP = r"\s*[/.\-_ ;,'’´`]\s*"
+FECHA_NUM = re.compile(r"(?<!\d)(\d{1,2})" + _SEP + r"(\d{1,2})" + _SEP + r"(\d{4}|\d{2})(?!\d)")
+# Año primero, como lo pone el teclado de algunos celulares: "1998-04-09", "1998/4/9"
+FECHA_ISO = re.compile(r"(?<!\d)((?:19|20)\d{2})\s*[/.\-_]\s*(\d{1,2})\s*[/.\-_]\s*(\d{1,2})(?!\d)")
 # Fechas escritas de corrido, como llegan del chat: "08112007", "050489", "05 0489"
 FECHA_PEGADA = re.compile(r"\b(\d{2})(\d{2})((?:19|20)\d{2}|\d{2})\b|\b(\d{1,2})[/.\-_ ](\d{2})(\d{2})\b")
-FECHA_MES = re.compile(r"\b(\d{1,2})\s+(?:de\s+)?(" + "|".join(MESES) + r")\b(?:\s+(?:de\s+|del\s+)?(\d{4}|\d{2})\b)?")
+FECHA_MES = re.compile(r"\b(\d{1,2})\s*(?:de\s*)?(" + "|".join(MESES) + r")\b(?:\s+(?:de\s+|del\s+)?(\d{4}|\d{2})\b)?")
 EVENTO = re.compile(r"(lunes|martes|miercoles|jueves|viernes|sabado|domingo|este|esta|"
                     r"proximo|para el|hasta el|el dia)\s*$")
 # "Leo" también es nombre de persona: el signo en texto solo cuenta con "soy" o "signo"
 # El signo en texto solo cuenta si es de quien pregunta: "soy aries", "soy de libra", "mi signo es leo"
 SIGNO_TXT = re.compile(r"\b(?:soy|mi signo es|mi signo)\s+(?:de\s+)?(" + "|".join(NOMBRES) + r")\b")
+# "soy carmen libra": el signo después del nombre. Sin "leo", que ahí suele ser el nombre de alguien.
+SIGNO_TRAS_NOMBRE = re.compile(r"\bsoy\s+[a-zñ]{3,}\s+(?:de\s+)?(" + "|".join(n for n in NOMBRES if n != "leo") + r")\b")
 # Un dato que aparece después de una referencia a un tercero es de ese tercero
 TERCERO = re.compile(r"\b(mi|su|el|la) (ex|novio|novia|esposo|esposa|pareja|marido|mujer|hijo|hija|"
                      r"mama|papa|amante|crush|jefe|jefa|amigo|amiga|hermano|hermana)\b")
@@ -82,8 +86,11 @@ def es_menor(dato: DatoSigno | None, hoy: date) -> bool:
     return hoy.year - f.year - ((hoy.month, hoy.day) < (f.month, f.day)) < 18
 
 
-FECHA_ABREV = re.compile(r"\b(\d{1,2})\s+(?:de\s+)?(" + "|".join(_ABREV) + r")\.?\s+(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
-FECHA_MES_DIA = re.compile(r"\b(" + "|".join(MESES) + r")\s+(\d{1,2})\s*,?\s+(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
+FECHA_ABREV = re.compile(r"\b(\d{1,2})[\s\-/.]+(?:de\s+)?(" + "|".join(_ABREV) + r")\.?[\s\-/.]+(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
+FECHA_MES_DIA = re.compile(r"\b(" + "|".join(MESES) + r")\s+(\d{1,2})(?:\s*[,/.\-]\s*|\s+)(?:de\s+|del\s+)?(\d{4}|\d{2})(?!\d)")
+# "enero 24": mes y día sin año. No cuenta si parece otra cosa ("en marzo 12 personas", "el 12 de…")
+FECHA_MES_DIA_CORTA = re.compile(r"(?<!\ben )(?<!\bel )(?<!\bpara )\b(" + "|".join(MESES) + r")\s+(\d{1,2})\b"
+                                 r"(?!\s*[/.\-]?\s*\d)(?!\s+(?:personas|veces|dias|meses|anos|horas|likes|de\b))")
 
 
 def _tapar(m: re.Match) -> str:
@@ -92,7 +99,7 @@ def _tapar(m: re.Match) -> str:
 
 def sin_fechas(texto: str) -> str:
     """El texto sin fechas de nacimiento, para mostrarlo en pantalla o buscarle la pregunta."""
-    for patron in (FECHA_NUM, FECHA_PEGADA, FECHA_ABREV, FECHA_MES_DIA):
+    for patron in (FECHA_NUM, FECHA_PEGADA, FECHA_ABREV, FECHA_MES_DIA, FECHA_MES_DIA_CORTA):
         texto = patron.sub(" ", texto)
     return " ".join(texto.split())
 
@@ -100,8 +107,11 @@ def sin_fechas(texto: str) -> str:
 def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
     """Fechas de nacimiento válidas del texto, con su posición, en orden de aparición."""
     hallados = []
-    numericas = [m.groups() + (m.start(),) for m in FECHA_NUM.finditer(t)]
-    numericas += [tuple(g for g in m.groups() if g) + (m.start(),) for m in FECHA_PEGADA.finditer(FECHA_NUM.sub(_tapar, t))]
+    numericas = [(m.group(3), m.group(2), m.group(1), m.start()) for m in FECHA_ISO.finditer(t)]
+    t_sin_iso = FECHA_ISO.sub(_tapar, t)
+    numericas += [m.groups() + (m.start(),) for m in FECHA_NUM.finditer(t_sin_iso)]
+    numericas += [tuple(g for g in m.groups() if g) + (m.start(),) for m in FECHA_PEGADA.finditer(FECHA_NUM.sub(_tapar, t_sin_iso))]
+    numericas.sort(key=lambda g: g[3])
     for g1, g2, g3, pos in numericas:
         d, mes, a = int(g1), int(g2), int(g3)
         if len(g3) == 2:
@@ -129,6 +139,16 @@ def _fechas(t: str) -> list[tuple[int, DatoSigno]]:
             if f <= date.today():
                 s, c = signo_por_fecha(f)
                 hallados.append((m.start(), DatoSigno(s, f, c, "fecha")))
+    tomadas += [(p, p + 12) for p, _ in hallados]
+    for m in FECHA_MES_DIA_CORTA.finditer(t):
+        if any(a <= m.start() < b for a, b in tomadas) or EVENTO.search(t[:m.start()]):
+            continue
+        try:
+            f = date(2000, MESES[m.group(1)], int(m.group(2)))
+        except ValueError:
+            continue
+        s, c = signo_por_fecha(f)
+        hallados.append((m.start(), DatoSigno(s, None, c, "fecha")))
     for m in FECHA_MES.finditer(t):
         if EVENTO.search(t[:m.start()]):
             continue                 # "este sábado 10 de octubre" es un evento, no un cumpleaños
@@ -183,7 +203,7 @@ def extraer(texto: str) -> DatoSigno | None:
         if 0 <= pos < corte:
             return DatoSigno(signo, None, False, "nombre")
 
-    m = SIGNO_TXT.search(t)
+    m = SIGNO_TXT.search(t) or SIGNO_TRAS_NOMBRE.search(t)
     if m and m.start() < corte:
         return DatoSigno(NOMBRES[m.group(1)], None, False, "nombre")
     return None
@@ -268,6 +288,32 @@ def repartir(texto: str, nickname: str = "", user: str = "") -> Reparto:
     if _DOS_PERSONAS_ANTES.search(t[:pos]) or _DOS_PERSONAS_DESPUES.search(t[pos:]):
         return Reparto(None, r.pareja, dudosa=dato)   # dos personas, una fecha y nada que diga de quién es
     return r
+
+
+def unica_fecha(texto: str) -> DatoSigno | None:
+    """La fecha del mensaje cuando trae una sola, esté donde esté ("mi ex Carlos volverá 12 06 90")."""
+    fechas = _fechas(_norm(texto))
+    return fechas[0][1] if len(fechas) == 1 else None
+
+
+_NO_ES_NOMBRE = set(NOMBRES) | set("""de del la el los las un una yo tu muy mas feliz madre padre mama papa
+    soltera soltero casada casado viuda viudo separada separado divorciada divorciado nueva nuevo mujer hombre
+    fiel infiel seguidora seguidor fan quien esa ese aquella amante novia novio esposa esposo su mi tan bien mal
+    nacida nacido signo mayor menor ella alguien persona madre feliz capaz buena bueno venezolana colombiana
+    mexicana peruana chilena ecuatoriana boliviana cubana dominicana hondureña argentina venezolano colombiano
+    mexicano peruano chileno ecuatoriano boliviano cubano dominicano hondureño argentino
+    enfermera enfermero doctora doctor medica medico estudiante profesora profesor docente maestra maestro
+    abogada abogado comerciante ama empleada empleado independiente emprendedora emprendedor""".split())
+_SE_PRESENTA = re.compile(r"\b(?:soy|me llamo|mi nombre es)\s+([^\W\d_]{3,15})\b", re.IGNORECASE)
+
+
+def nombre_dicho(texto: str) -> str | None:
+    """El nombre con que la persona se presenta en su mensaje ("soy Lizet…", "me llamo Iván"), o None.
+    En el live se le habla por ese nombre y no por el de su cuenta."""
+    m = _SE_PRESENTA.search(texto or "")
+    if not m or _norm(m.group(1)) in _NO_ES_NOMBRE:
+        return None
+    return m.group(1).capitalize()
 
 
 def respuesta_duda(texto: str) -> str | None:

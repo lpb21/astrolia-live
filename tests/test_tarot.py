@@ -22,18 +22,20 @@ def test_posiciones_segun_valor():
     assert posiciones_para(1) == posiciones_para(4) == ("mensaje",)
     assert posiciones_para(5) == posiciones_para(9) == ("pasado", "presente", "futuro")
     assert posiciones_para(10) == posiciones_para(49) == ("pasado", "presente", "futuro", "consejo")
-    assert posiciones_para(50) == posiciones_para(99) == ("pasado", "presente", "futuro", "obstáculo", "consejo")
-    assert posiciones_para(100)[-1] == "consejo" and len(posiciones_para(100)) == 6
+    assert posiciones_para(50) == posiciones_para(98) == ("pasado", "presente", "futuro", "obstáculo", "consejo")
+    assert posiciones_para(99)[-1] == "consejo" and len(posiciones_para(99)) == 6      # 99: Singing Mushroom
     assert posiciones_para(5000) == posiciones_para(100)
 
 def test_niveles():
-    nombres = [nivel_para(v).nombre for v in (0, 4, 5, 10, 20, 31, 98, 100, 200)]
+    nombres = [nivel_para(v).nombre for v in (0, 4, 5, 10, 20, 31, 98, 99, 199)]
     assert nombres == ["Sí o no", "Mensaje del oráculo", "Tres tiempos", "Tres tiempos con consejo",
                        "Lectura con ritual", "Lectura doble", "Lectura profunda", "Lectura completa",
                        "Lectura maestra"]
     assert nivel_para(31) != nivel_para(98)                       # ya no reciben lo mismo
     assert [n.minimo for n in NIVELES] == sorted((n.minimo for n in NIVELES), reverse=True)
-    assert [n.minimo for n in NIVELES if n.en_menu] == [200, 100, 30, 10, 5, 1, 0]
+    assert [n.minimo for n in NIVELES if n.en_menu] == [199, 99, 30, 10, 5, 1, 0]
+    # el menú anuncia regalos, no monedas: cada nivel de pago del menú trae el suyo
+    assert all(n.regalo for n in NIVELES if n.en_menu and n.minimo) and nivel_para(198).nombre == "Lectura completa"
     assert not nivel_para(29).segunda_pregunta and nivel_para(30).segunda_pregunta
 
 def test_tirada_sin_cartas_repetidas():

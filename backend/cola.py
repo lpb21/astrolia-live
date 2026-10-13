@@ -3,7 +3,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging, re
-from astro.signos import (DatoSigno, FECHA_MES, SIGNO_TXT, _norm, fecha_incompleta, repartir,
+from astro.signos import (DatoSigno, FECHA_MES, SIGNO_TXT, _norm, fecha_incompleta, repartir, unica_fecha,
                           respuesta_duda, sin_fechas)
 from backend.bitacora import anotar
 from backend.filtro import MINIMO, evaluar
@@ -44,6 +44,8 @@ META = re.compile(
     # comentarios sobre el propio live, vistos en el log del 11 de octubre
     r"|\bmi pregunta (ya |te |no |si |me )*(salio|sale|llego|paso|la leiste|la leyo|la viste)\b|\bla lista\b"
     r"|\b(yo falto|falto yo|falta la mia|faltan? (yo|la mia)|y la mia)\b|\bvoy a enviar(te|le)?\b"
+    # saludos que traen signo de pregunta: "hola lindo día, bien gracias y tú?"
+    r"|\by (tu|usted|ustedes)\s*\?|\bcomo (estas|estan|te va|amanecis\w*|vas)\b|^(hola+ )?que tal( todo| estas)?\W*$"
     r"|\bal interno\b|\bnuestra comunidad acaba de\b|^de acuerdo\b|^(ya )?la ultima\b|^bonit[oa] (dia|tarde|noche|domingo|semana)\b"
     # problemas técnicos del live: "hola no te escucho", "se fue el audio"
     r"|\bno (te |se |la |los )?(escucho|escucha|escuchamos|oigo|oye|veo|ve)\b|\b(sin|no hay|se fue el) (audio|sonido)\b"
@@ -105,6 +107,9 @@ def trae_pregunta(texto: str) -> bool:
 def _clave(texto: str) -> str:
     """La pregunta reducida a sus letras, para reconocerla cuando la repiten."""
     return re.sub(r"[^a-zñ0-9]", "", _norm(texto))
+
+
+PEQUENO = 5     # monedas: por debajo de esto, un regalo sin pregunta recibe el mensaje corto, en grupo
 
 
 @dataclass
@@ -227,6 +232,8 @@ class Cola:
                 if len(self._veredictos) > 5000:
                     self._veredictos.popitem(last=False)
             item = self._items.get(ev["user"])
+            if item and item.estado == "leyendo" and item.pregunta and _clave(texto) == _clave(item.pregunta):
+                return                               # repite la pregunta que se le está leyendo ahora mismo
             if (item and item.estado == "pendiente" and not item.pregunta and not item.pedido_chat
                     and INTERNO.search(_norm(texto))):
                 item.dijo_interno = True             # la voz le pedirá que la escriba en el chat
@@ -260,6 +267,11 @@ class Cola:
             self._resolver_duda(item, resp == "propia")
             return True                              # "mía" / "de él": era la respuesta, no una pregunta
         r = self._reparto(user, texto, nickname)
+        if (r.propio is None and not r.dudosa and abierto and item.dato is None and item.pedido_fecha is not None
+                and (suya := unica_fecha(texto))):
+            # Se le pidió su fecha y contestó repitiendo la pregunta con la fecha al final ("Mi ex Carlos
+            # volverá a buscarme 12 06 90"): es la suya, aunque venga después de nombrar a la otra persona
+            r.propio, r.pareja, r.de_pareja = suya, None, False
         dato, pareja = r.propio, r.pareja
         if pareja and abierto and item.pareja is None:
             item.pareja = pareja
@@ -337,6 +349,8 @@ class Cola:
         self._items[user] = Item(user, nickname, texto, valor, list(regalos), ts,
                                  dato=self._datos.get(user), pareja=r.pareja, dudosa=r.dudosa,
                                  fecha_de_pareja=r.de_pareja,
+                                 # "Aleyda del 86 quiero saber…": dio la fecha a medias en la misma pregunta
+                                 incompleta=(fecha_incompleta(texto) or "") if r.propio is None and not r.dudosa else "",
                                  prioridad=pase is not None and ts - pase <= VIGENCIA_PASE)
 
     def _sirve_de_pregunta(self, texto: str) -> bool:
@@ -378,7 +392,9 @@ class Cola:
         item = self._items.get(user)
         if item and item.estado == "pendiente":
             item.prioridad = True
-            return bool(item.pregunta)
+            if not item.pregunta:
+                item.ts = ahora          # el plazo para escribirla empieza de nuevo: si ya había vencido,
+            return bool(item.pregunta)   # se le leía el mensaje general en el acto, sin dejarle preguntar
         self._pases[user] = ahora
         if item is None and user in self._preguntas:
             self._crear(user, nickname, 0, [], self._preguntas[user].ts)
@@ -462,6 +478,9 @@ class Cola:
         cuando hay pregunta; el mensaje sin pregunta no la necesita."""
         if not item.pregunta:
             return ["pregunta"]
+        f = evaluar(item.pregunta)
+        if f.accion in ("mensaje_fijo", "saltar") or (f.accion == "invitar" and item.valor == 0):
+            return []            # tema que no se lee: se le responde de una vez, sin pedirle la fecha
         if item.dato is None and item.dudosa is None and self.espera_fecha is not None:
             return ["fecha"]
         return []
@@ -480,7 +499,8 @@ class Cola:
 
     def sin_fecha(self, ahora: datetime) -> list[Item]:
         """Ítems con pregunta a los que todavía no se les ha pedido la fecha de nacimiento."""
-        return [i for i in self.pendientes(ahora) if self.falta(i) == ["fecha"] and i.pedido_fecha is None]
+        return [i for i in self.pendientes(ahora)
+                if self.falta(i) == ["fecha"] and i.pedido_fecha is None and not i.incompleta]   # a esos se les dice qué falta
 
     def cartel(self, ahora: datetime) -> str | None:
         """Nombres para el cartel "agotó su pregunta gratis": quienes insistieron hace poco (hasta 3)."""
@@ -519,7 +539,7 @@ class Cola:
 
     def con_fecha_incompleta(self, ahora: datetime) -> list[Item]:
         """Ítems cuya persona respondió la fecha a medias y todavía no sabe qué le falta."""
-        return [i for i in self.pendientes(ahora) if i.incompleta and i.dato is None]
+        return [i for i in self.pendientes(ahora) if i.incompleta and i.dato is None and i.pregunta]
 
     def sin_pregunta(self, ahora: datetime) -> list[Item]:
         """Ítems que regalaron sin preguntar y a los que todavía no se les ha pedido la pregunta."""
@@ -535,6 +555,20 @@ class Cola:
                     self._deben_pregunta[item.user] = (ahora, item.valor, list(item.regalos))
                 return item
         return None
+
+    def tomar_grupo(self, primero: Item, ahora: datetime, maximo: int) -> list[Item]:
+        """Otros turnos como `primero` (regalo pequeño, sin pregunta y con el plazo ya vencido) para leerles
+        juntos una sola carta. Quedan en "leyendo", igual que si se hubieran tomado uno por uno."""
+        grupo = []
+        for item in self.pendientes(ahora):
+            if len(grupo) >= maximo:
+                break
+            if (item is not primero and not item.pregunta and not item.prioridad
+                    and 0 < item.valor < PEQUENO and self._lista(item, ahora)):
+                item.estado = "leyendo"
+                self._deben_pregunta[item.user] = (ahora, item.valor, list(item.regalos))
+                grupo.append(item)
+        return grupo
 
     def cerrar(self, user: str, estado: str = "hecho") -> None:
         item = self._items.pop(user, None)

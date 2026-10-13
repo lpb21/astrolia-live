@@ -13,8 +13,8 @@ DESTINO = Path(__file__).resolve().parent.parent / "voz"
 BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
 
-def main() -> int:
-    nombre = sys.argv[1] if len(sys.argv) > 1 else "es_MX-claude-high"
+def bajar(nombre: str) -> int:
+    """Baja el modelo y su configuración a voz/ si no están. Devuelve 0 si quedó lista."""
     try:
         region, persona, calidad = nombre.split("-")
     except ValueError:
@@ -38,6 +38,10 @@ def main() -> int:
                         f.write(trozo)
     print(f"Listo: {DESTINO / nombre}.onnx")
     return 0
+
+
+def main() -> int:
+    return bajar(sys.argv[1] if len(sys.argv) > 1 else "es_MX-claude-high")
 
 
 if __name__ == "__main__":

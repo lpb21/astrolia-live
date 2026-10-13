@@ -6,7 +6,7 @@ def test_emergencia_medica_menor():
 
 def test_embarazo():
     r = evaluar("Soy Verónica quedare embarazada pronto")
-    assert r.categoria == "embarazo" and r.accion == "con_regalo"
+    assert r.categoria == "embarazo" and r.accion == "mensaje_fijo"      # va por DM: no se lee en el live
 
 def test_posible_menor():
     r = evaluar("Mi papa me obligará a terminar con mi novio o aceptará que este con el?")
@@ -44,7 +44,7 @@ def test_casos_reales_siguen_bloqueados():
 
 def test_cancer_como_signo_pasa():
     for t in ["soy cáncer, él volverá?", "soy de cáncer", "mi signo es Cáncer me va a buscar?",
-              "él es cáncer y yo leo, somos compatibles?", "que siente jorge Sánchez (cáncer) por mi?",
+              "él es cáncer y yo leo, nos irá bien?", "que siente jorge Sánchez (cáncer) por mi?",
               "mi ex es cáncer volverá?", "los cáncer son muy sensibles verdad?", "tengo luna en cáncer",
               "mi novio tiene el sol en cáncer", "tengo ascendente cancer", "con cáncer me llevo bien?",
               "tengo un novio cáncer", "soy cáncer, mi relación va a mejorar?",

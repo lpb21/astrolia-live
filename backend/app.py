@@ -13,7 +13,8 @@ from backend import bitacora, revision
 from backend.boost import Boost
 from backend.cola import Cola, es_pregunta, parece_pregunta, trae_pregunta
 from backend.filtro import evaluar
-from backend.overlay import CARPETAS, vista
+from backend.overlay import CARPETAS, Efectos, vista
+from astro.eventos import desde_entorno as eventos_astro
 from backend.worker import Worker, GeneradorFalso
 from tarot.tirada import NIVELES, nivel_para
 
@@ -52,7 +53,18 @@ def _voz():
     if not modelo.is_file():
         logging.warning(f"sin voz: no está {modelo} (corre python -m tools.descargar_voz)")
         return None
-    return VozPiper(modelo)
+    hablante = os.getenv("VOZ_HABLANTE")           # solo modelos con varias voces (es_ES-sharvard: 1 = mujer)
+    return VozPiper(modelo, int(hablante) if hablante else None)
+
+
+def _tips():
+    """La IA que escribe tips nuevos para los ratos sin preguntas. Sin clave, salen los fijos de frases.py."""
+    if not os.getenv("ANTHROPIC_API_KEY") or os.getenv("TIPS_IA", "1") == "0":
+        return None
+    from backend.tips import TipsClaude
+    t = TipsClaude()
+    logging.info(f"tips con Claude ({t.modelo})")
+    return t
 
 
 voz = _voz()
@@ -66,15 +78,24 @@ boost = Boost(cada=timedelta(minutes=_cada) if _cada > 0 else None)
 # Cada cuántos minutos la voz recuerda cómo pedir la pregunta gratis (0 = nunca)
 _aviso = int(os.getenv("AVISO_GRATIS_MIN", "5"))
 
+# Segundos de silencio tras los cuales la voz llena el rato con un tip, la carta del momento o el cielo (0 = callada)
+_relleno = int(os.getenv("RELLENO_SEG", "3"))
+
 # Segundos mínimos entre un saludo a quienes van entrando y el siguiente (0 = no saludar).
 # Solo se saluda cuando no hay ninguna pregunta lista para leer.
 _bienvenida = int(os.getenv("BIENVENIDA_CADA_SEG", "180"))
 
+# Minutos sin recibir ningún evento del live tras los cuales la voz deja de rellenar (0 = no vigilar).
+# Cubre que la ingesta no esté corriendo o que el live haya terminado.
+_sin_live = int(os.getenv("SIN_LIVE_MIN", "3"))
+
 cola = Cola()
+efectos = Efectos()         # animaciones de regalo que el overlay todavía puede mostrar
 worker = Worker(cola, _generador(), boost=boost,
                 aviso_gratis=timedelta(minutes=_aviso) if _aviso > 0 else None,
                 bienvenida=timedelta(seconds=_bienvenida) if _bienvenida > 0 else None,
-                voz=voz)
+                voz=voz, relleno=timedelta(seconds=_relleno) if _relleno > 0 else None, tips=_tips(), eventos=eventos_astro(),
+                sin_live=timedelta(minutes=_sin_live) if _sin_live > 0 else None)
 
 
 @asynccontextmanager
@@ -113,6 +134,10 @@ def ahora() -> datetime:
 @app.post("/eventos", status_code=204)
 async def recibir(ev: EventoIn):
     ts = datetime.fromisoformat(ev.ts)
+    if ev.tipo == "conexion":        # la ingesta avisa que se conectó o que el live terminó
+        worker.conexion(ev.texto == "conectado", ahora())
+        return
+    worker.senal(ahora())
     if ev.tipo == "like":            # valor = cuántos toques trae el evento
         boost.like(ev.user, ev.nickname, ev.valor, ts)
         return
@@ -146,6 +171,7 @@ def _entrar(ev: EventoIn, ts: datetime, veredicto: bool | None = None) -> None:
                         signo=dato.signo if dato else "", tema=tema.categoria if tema.sensible else "",
                         situacion=cola.situacion(ev.user))
     elif ev.tipo == "gift":
+        efectos.regalo(ev.regalo, ahora())        # por la hora de llegada: un reenvío tardío no se anima
         bitacora.anotar("regalo", ev.user, ev.nickname, ts, texto=ev.regalo, valor=ev.valor,
                         situacion=cola.situacion(ev.user))
     elif ev.tipo == "follow":
@@ -255,7 +281,7 @@ async def audio(clave: str):
 
 @app.get("/overlay/estado")
 async def estado_overlay():
-    return vista(cola, worker, ahora())
+    return {**vista(cola, worker, ahora()), "efectos": efectos.recientes(ahora()), "en_vivo": worker.en_vivo(ahora())}
 
 
 class SinCache(StaticFiles):
@@ -269,6 +295,10 @@ class SinCache(StaticFiles):
 for _ruta, _carpeta in CARPETAS:      # sin imágenes el overlay dibuja las cartas; ver tools/descargar_cartas.py
     if _carpeta.is_dir():
         app.mount(f"/overlay/{_ruta}", SinCache(directory=_carpeta), name=_ruta)
+# Videos del avatar (reposo, hablando, gato, gato_camina, barajar, rosa, rosquilla), tal como se descargaron
+_videos = Path(os.getenv("AVATAR_VIDEOS") or Path(__file__).parent.parent / "resources" / "videos")
+if _videos.is_dir():
+    app.mount("/overlay/videos", SinCache(directory=_videos), name="videos")
 # Página para revisar el live persona por persona: http://127.0.0.1:8000/revision/ (no sale al aire)
 app.mount("/revision", SinCache(directory=Path(__file__).parent.parent / "revision", html=True), name="revision")
 # Fuente de navegador para LIVE Studio: http://127.0.0.1:8000/overlay/

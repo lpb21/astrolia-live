@@ -12,9 +12,10 @@ def test_vista_en_espera_trae_menu_y_turnos():
     c, w = preparar("", espera_fecha=timedelta(seconds=90))
     v = vista(c, w, AHORA)
     assert v["actual"] is None and v["hablando"] is None and v["en_cola"] == 1
-    assert v["turnos"] == [{"nickname": "U", "nivel": "Mensaje del oráculo", "falta": ["pregunta"], "signo": "", "pase": False}]
+    assert v["turnos"] == [{"nickname": "U", "nivel": "Mensaje del oráculo", "falta": ["pregunta"], "restante": 178, "signo": "", "pase": False}]
     assert v["boost"] is None
-    assert [n["monedas"] for n in v["menu"]] == [0, 1, 5, 10, 30, 100, 200]
+    assert [n["monedas"] for n in v["menu"]] == [0, 1, 5, 10, 30, 99, 199]
+    assert [n["regalo"] for n in v["menu"]] == ["", "🌹 Rosa", "🫰 Corazón de dedos", "🌹 10 Rosas", "🍩 Rosquilla", "🎉 Confeti", "🙌 Manos bailando"]
 
 def test_lectura_lleva_cartas_y_pregunta_sin_fecha(tmp_path):
     c, w = preparar("soy Ana 05/05/90 me va a buscar Juan?")
@@ -96,3 +97,15 @@ def test_la_app_sirve_las_cartas_preparadas():
         pytest.skip("sin cartas preparadas; corre python -m tools.preparar_cartas")
     r = TestClient(app).get("/overlay/cartas/la-luna.webp")
     assert r.status_code == 200 and r.headers["content-type"] == "image/webp"
+
+
+# ---------- animaciones de regalo del avatar ----------
+def test_la_rosa_y_la_rosquilla_tienen_animacion_y_caducan():
+    from backend.overlay import Efectos
+    e = Efectos()
+    e.regalo("Rose", AHORA)
+    e.regalo("Finger Heart", AHORA)                       # sin animación propia
+    e.regalo(" doughnut ", AHORA + timedelta(seconds=5))
+    assert e.recientes(AHORA + timedelta(seconds=6)) == [{"id": 1, "clip": "rosa"}, {"id": 2, "clip": "rosquilla"}]
+    assert e.recientes(AHORA + timedelta(seconds=14)) == [{"id": 2, "clip": "rosquilla"}]      # la rosa ya pasó
+    assert e.recientes(AHORA + timedelta(seconds=60)) == []

@@ -40,7 +40,7 @@ body.fondo { background: radial-gradient(120% 80% at 50% 35%, #4a2f7a 0%, #1b103
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: center top;
 }
-#avatar video { opacity: 0; transition: opacity .45s ease; }
+#avatar video { opacity: 0; transition: opacity .45s ease; }      /* el reposo va debajo; los demás se funden encima */
 #avatar video.visible { opacity: 1; }
 ol, ul { list-style: none; }
 
@@ -85,13 +85,13 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 /* ---------- menú (derecha) ---------- */
 #menu { position: absolute; right: var(--margen); top: var(--arriba); width: var(--columna); }
 #menu-lista { padding: 8px 12px 10px; }
-#menu-lista li { display: grid; grid-template-columns: 82px 1fr; gap: 10px; align-items: center; padding: 4px 0; }
-.monedas {
-  font-weight: 800; font-size: 21px; text-align: center; color: #2a1a05;
-  background: linear-gradient(180deg, #ffe7a8, #e0a93c); border-radius: 999px; padding: 5px 0;
+#menu-lista li { display: grid; justify-items: start; gap: 3px; padding: 6px 0; }
+.regalo {
+  font-weight: 800; font-size: 21px; color: #2a1a05; white-space: nowrap;
+  background: linear-gradient(180deg, #ffe7a8, #e0a93c); border-radius: 999px; padding: 3px 14px;
 }
-.monedas.gratis { background: linear-gradient(180deg, #e4d9ff, #a98df0); color: #1c0f3d; }
-.menu-nombre { font-weight: 700; font-size: 23px; line-height: 1.15; }
+.regalo.gratis { background: linear-gradient(180deg, #e4d9ff, #a98df0); color: #1c0f3d; }
+.menu-nombre { font-weight: 700; font-size: 22px; line-height: 1.15; padding-left: 4px; }
 
 /* ---------- boost de likes (arriba al centro, solo mientras corre la ronda) ---------- */
 #boost {
@@ -112,6 +112,20 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 #boost-top .likes { color: #ff9ec2; font-weight: 800; white-space: nowrap; }
 .turno-detalle.pase { color: #ff9ec2; font-weight: 700; }
 
+/* ---------- de quién es el turno (solo, entre el letrero y la cabeza del avatar) ---------- */
+#rotulo {
+  position: absolute; left: 50%; top: 338px; transform: translateX(-50%);
+  width: max-content; max-width: 420px;      /* el hueco entre la columna de turnos y la de lecturas */
+  display: grid; justify-items: center; gap: 4px; padding: 10px 26px 12px; text-align: center;
+  background: rgb(var(--noche) / .9); border: 2px solid var(--oro); border-radius: 22px;
+  box-shadow: 0 0 26px rgb(236 200 120 / .4), 0 8px 22px rgb(0 0 0 / .5);
+  animation: entra .4s ease-out both;
+}
+#rotulo-que { font: 700 20px/1 var(--titulos); letter-spacing: .16em; text-transform: uppercase; color: var(--lila); }
+#rotulo.barajando #rotulo-que::after { content: "…"; animation: late 1.6s ease-in-out infinite; }
+#rotulo-quien { font: 800 31px/1.15 var(--texto); color: #fff; max-width: 100%;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ---------- lectura (centro, sobre el chat) ---------- */
 #lectura {
   position: absolute; left: var(--margen); right: var(--margen); bottom: var(--abajo);
@@ -127,7 +141,7 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 }
 #estado.espera::after { content: "…"; animation: late 1.6s ease-in-out infinite; }
 
-#cartas { display: flex; justify-content: center; gap: 14px; width: 100%; perspective: 1400px; }
+#cartas { display: flex; justify-content: center; gap: 14px; width: 100%; }
 #cartas:empty { display: none; }
 .carta { --ancho: 190px;      /* tamaño según cuántas cartas son; pueden tapar al gato, que se vean bien */
          width: var(--ancho); flex: none; text-align: center; }
@@ -140,19 +154,18 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 #cartas[data-n="6"] .carta-pie { font-size: 15px; white-space: nowrap; }      /* en una línea, placas parejas */
 #cartas[data-n="5"] .carta-rotulo, #cartas[data-n="6"] .carta-rotulo { padding: 6px 2px 7px; margin-top: 8px; }
 /* La carta llega boca abajo y se voltea cuando la lectura llega a ella (.revelada).
-   .carta-giro es lo que gira; adentro van el frente y el dorso, espalda con espalda. El rótulo queda
-   fuera del giro para que su texto no se vea borroso. */
+   El volteo es plano: la carta se estrecha, a la mitad se quita el dorso y vuelve a abrirse. No se usa
+   giro en 3D ni "backface-visibility": en una prueba una carta quedó invisible y no se logró repetir. Así,
+   pase lo que pase con la animación, el frente siempre está debajo y termina a la vista. */
+.carta { animation: reparte .5s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * .18s); }
 .carta-giro {
   position: relative; width: var(--ancho); aspect-ratio: 3 / 5;
-  transform-style: preserve-3d; transform: rotateY(180deg);
-  transition: transform .8s cubic-bezier(.3, .7, .2, 1);
-  animation: reparte .5s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * .18s);
+  transition: transform .4s ease;
 }
-.carta.revelada .carta-giro { transform: rotateY(0deg); }
+.carta.revelada .carta-giro { animation: voltea .7s ease-in-out; }
 .carta.revelada.activa .carta-giro { transform: translateY(-8px) scale(1.03); }
 .carta-cara {
   position: absolute; inset: 0; border-radius: 12px; overflow: hidden;
-  backface-visibility: hidden; -webkit-backface-visibility: hidden;
   border: 3px solid var(--oro); box-shadow: 0 10px 24px rgb(0 0 0 / .55);
   transition: box-shadow .4s ease;
 }
@@ -160,7 +173,7 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 .carta.revelada.activa .carta-cara { box-shadow: 0 0 0 3px #fff3cf, 0 0 34px 6px rgb(236 200 120 / .75); }
 /* Dorso: azul noche con estrella dorada, como las cartas dibujadas en la mesa del avatar */
 .carta-dorso {
-  transform: rotateY(180deg);
+  opacity: 1; transition: opacity 0s linear .35s;      /* desaparece justo a la mitad del volteo */
   display: flex; align-items: center; justify-content: center;
   background:
     radial-gradient(circle at 50% 50%, rgb(236 200 120 / .22), transparent 46%),
@@ -168,6 +181,7 @@ h2 span { color: var(--lila); letter-spacing: 0; }
     linear-gradient(165deg, #2d2752, #15102e);
   box-shadow: 0 10px 24px rgb(0 0 0 / .55), inset 0 0 0 6px #15102e, inset 0 0 0 8px var(--oro-suave);
 }
+.carta.revelada .carta-dorso { opacity: 0; }
 .carta-dorso::before { content: "✦"; font-size: calc(var(--ancho) * .46); line-height: 1; color: var(--oro);
                        text-shadow: 0 0 18px rgb(236 200 120 / .6); }
 /* Mientras está boca abajo, el rótulo muestra solo la posición; el nombre aparece al voltearla */
@@ -224,5 +238,6 @@ h2 span { color: var(--lila); letter-spacing: 0; }
 }
 
 @keyframes entra { from { opacity: 0; transform: translateY(14px); } }
-@keyframes reparte { from { opacity: 0; transform: translateY(70px) rotateY(180deg); } }
+@keyframes reparte { from { opacity: 0; transform: translateY(70px); } }
+@keyframes voltea { 50% { transform: scaleX(.03); } }
 @keyframes late { 50% { opacity: .25; } }

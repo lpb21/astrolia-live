@@ -458,3 +458,9 @@ def test_casos_del_live_indiodeluz():
         assert not es_pregunta(t), t
     assert parece_pregunta("Soy segundo 87 mi pareja deverdad me quiso y por q se terminó mi relación")
     assert parece_pregunta("mi pregunta gratis es si volverá Juan conmigo?")
+
+
+def test_saludo_con_signo_de_pregunta_no_es_pregunta():      # Annai G, live del 12 de octubre
+    for t in ["Hola lindo día, bien gracias y tú ?", "hola cómo estás?", "hola qué tal?"]:
+        assert not es_pregunta(t), t
+    assert es_pregunta("cómo está mi relación con Juan?") and es_pregunta("y tú crees que él vuelve?")

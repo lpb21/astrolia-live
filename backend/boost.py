@@ -24,6 +24,7 @@ class Boost:
         self.inicio: datetime | None = None      # ronda en curso (o terminada sin cerrar)
         self._proximo: datetime | None = None
         self._likes: dict[str, list] = {}        # user -> [nickname, likes, cuándo llegó a esa cifra]
+        self.ganadores: set[str] = set()         # quien ya ganó en este live no vuelve a competir ni sale en la lista
 
     def activo(self, ahora: datetime) -> bool:
         return self.inicio is not None and ahora < self.inicio + self.duracion
@@ -39,7 +40,7 @@ class Boost:
         self.inicio, self.pedido, self._likes = ahora, False, {}
 
     def like(self, user: str, nickname: str, cantidad: int, ts: datetime) -> None:
-        if self.inicio is None or not self.inicio <= ts < self.inicio + self.duracion:
+        if self.inicio is None or not self.inicio <= ts < self.inicio + self.duracion or user in self.ganadores:
             return
         fila = self._likes.setdefault(user, [nickname, 0, ts])
         fila[1] += max(cantidad, 1)
@@ -54,6 +55,7 @@ class Boost:
         if self._likes:
             user, (nickname, likes, _) = min(self._likes.items(), key=lambda kv: (-kv[1][1], kv[1][2]))
             ganador = Ganador(user, nickname, likes)
+            self.ganadores.add(user)
         self.inicio, self._likes = None, {}
         self._proximo = ahora + self.cada if self.cada is not None else None
         return ganador

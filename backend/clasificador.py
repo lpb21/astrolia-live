@@ -28,7 +28,9 @@ Responde "comentario" si es cualquier otra cosa:
 - una reacción a la lectura que le acaban de hacer: "todavía me dice que me hablaba por humanidad", "correcto, me había comentado de su economía", "sí, fue horrible el pasado", "así es, él es muy orgulloso";
 - conversación con la tarotista o con otras personas, saludos, agradecimientos, elogios: "das respuestas bacanas", "bonito domingo";
 - algo sobre el propio live, los turnos o los regalos: "ya envié la rosa", "cuánto me falta", "no se escucha";
-- solo un nombre con una fecha o un signo, sin consulta: "Juan Pablo Yepes 16/09/2004".
+- solo un nombre con una fecha o un signo, sin consulta: "Juan Pablo Yepes 16/09/2004", "Natalia Pabón enero 24";
+- mensajes para el resto del chat, arengas y avisos de quienes moderan el live: "vamos chicos 5 quiéreme más", "dinámica en placa", "Mirna y Silvia Mariana con pregunta", "estén atentos cuando envían el regalo", "no hagas spam";
+- avisos o acuerdos con la tarotista, aunque mencionen una consulta: "ahora te escribo para que hagamos consulta", "dale, ahora nos hablamos", "me habías dejado un audio y se me borró", "luego te envío la pregunta".
 
 Si <ya_le_leyeron> es "sí", una afirmación sobre la otra persona suele ser una reacción a esa lectura: clasifícala como "comentario" salvo que claramente plantee una consulta nueva.
 

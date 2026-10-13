@@ -209,3 +209,26 @@ def test_me_llamo_con_la_segunda_fecha():           # Richy García, live del 12
 def test_anio_pegado_a_la_palabra_siguiente():      # Judith, live del 12 de octubre
     d = extraer("soy Judith, octubre 10 de 90egresaré con la persona que ya no vivo?")
     assert d and d.signo == "Libra" and d.fecha.year == 1990
+
+def test_mes_dia_con_barra_y_sin_anio():            # live del 12 de octubre
+    d = extraer("hola, Alexander Zúñiga marzo 6/75 Estefanía burbano junio 30/92 nuestras vidas se volverán a cruzar?")
+    assert d.signo == "Piscis" and d.fecha.year == 1975
+    assert extraer_pareja("Alexander Zúñiga marzo 6/75 Estefanía burbano junio 30/92 volverán?").signo == "Cáncer"
+    d = extraer("Natalia Pabon enero 24")
+    assert d.signo == "Acuario" and d.fecha is None
+    for t in ["volverá en enero 5 o en febrero?", "nos vemos en marzo 12 personas, irá?", "me paga el junio 30 de este año?"]:
+        assert extraer(t) is None, t
+
+
+def test_fechas_del_live_astrologos5():
+    assert extraer("hola soy micaela 05,12,79 leonel 28.02.89 volvera").fecha.year == 1979
+    assert extraer_pareja("hola soy micaela 05,12,79 leonel 28.02.89 volvera").signo == "Piscis"
+    assert extraer("Edixon freitez 25de mayo 1982 y Jaqueline Salazar tuvieron algo").signo == "Géminis"
+    assert extraer_pareja("08-05-96 mi novia Valentina 03-sep-96 vuelve conmigo").signo == "Virgo"
+    assert extraer("hola soy carmen libra Ramón capricornio tendré una relación estable").signo == "Libra"
+    assert extraer("soy amiga de leo, volverá?") is None and extraer("tengo 3, 4 y 15 dudas, volverá?") is None
+
+
+def test_fecha_pegada_al_nombre():                  # maribel, live del 12 de octubre
+    d = extraer("maribel colon2-16-69 jose alfredo el mevolvera a llamar")
+    assert d.signo == "Acuario" and d.fecha.year == 1969 and d.fecha.month == 2

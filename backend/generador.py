@@ -58,9 +58,15 @@ class GeneradorClaude:
         return self._leer(r)
 
     async def _pedir(self, prompt: dict):
+        modelo = self.modelo_para(prompt.get("valor", UMBRAL))
+        # El modelo rápido va sin razonamiento previo: medido el 12-oct-2026 con una lectura de sí o no,
+        # pasó de 7,6 s y 1.794 tokens de salida a 3,1 s y 221, con un texto equivalente. El modelo
+        # principal no admite apagarlo.
+        sin_razonar = {"thinking": {"type": "disabled"}} if modelo == self.modelo_rapido != self.modelo else {}
         return await self.cliente.beta.messages.create(
-            model=self.modelo_para(prompt.get("valor", UMBRAL)),
+            model=modelo,
             max_tokens=MAX_TOKENS,
+            **sin_razonar,
             system=prompt["system"],
             messages=prompt["messages"],
             output_config={"effort": "low", "format": FORMATO},   # lecturas cortas y en vivo: prima la rapidez

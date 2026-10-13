@@ -13,8 +13,8 @@
 <!-- Lienzo fijo de 1080×1920 que se escala a la ventana. Fondo transparente: la escena y el
      avatar van detrás, en LIVE Studio. Parámetros: ?demo=1 (datos de muestra) y ?fondo=1. -->
 <main id="lienzo">
-  <!-- Avatar: imagen fija y, encima, los bucles de video que existan en overlay/avatar/
-       (reposo.mp4, hablando.mp4, gato.mp4). Sin archivos, el fondo queda transparente. -->
+  <!-- Avatar: los videos de videos/ (reposo, hablando, gato, gato_camina, barajar, rosa, rosquilla;
+       el backend los sirve desde resources/videos/). Mientras cargan, o si no hay, queda la imagen fija. -->
   <div id="avatar" hidden><img id="avatar-fija" src="avatar/reposo.jpeg" alt=""></div>
   <div id="izquierda">
     <section id="turnos" class="panel" hidden>
@@ -35,10 +35,13 @@
   </section>
 
   <section id="boost" class="panel" hidden>
-    <h2>⚡ Boost de likes <span id="boost-reloj"></span></h2>
+    <h2>⚡ Boost de tap tap <span id="boost-reloj"></span></h2>
     <p id="boost-regla">Quien más toque la pantalla pasa de primero</p>
     <ol id="boost-top"></ol>
   </section>
+
+  <!-- De quién es el turno: "Barajando para…" y luego "Leyendo a…". Va solo, entre el letrero y la cabeza del avatar -->
+  <p id="rotulo" hidden><span id="rotulo-que"></span><strong id="rotulo-quien"></strong></p>
 
   <section id="lectura">
     <div id="cartas"></div>

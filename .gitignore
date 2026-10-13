@@ -4,3 +4,7 @@ __pycache__/
 *.log
 logs/
 tarot/img/*.jpg
+tarot/img_live/
+voz/*.onnx
+voz/*.onnx.json
+voz/muestras/
