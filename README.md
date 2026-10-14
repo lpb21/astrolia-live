@@ -4,7 +4,7 @@ Sistema que atiende un live de TikTok de tarot y astrología: escucha el chat, a
 
 Este documento recoge **qué hace cada parte, cómo se ejecuta y por qué se tomó cada decisión**. Las decisiones salen de las conversaciones de diseño y de revisar los logs de cinco lives de prueba (8, 9, 11 y 12 de octubre de 2026).
 
-> **Estado (12 de octubre de 2026).** Toda la lógica está cubierta por 264 tests. Se ha probado conectado a lives ajenos en curso, siempre con el generador de prueba. **No se ha probado todavía:** la IA real (falta `ANTHROPIC_API_KEY`), la voz (no existe aún), el overlay dentro de LIVE Studio ni un live propio.
+> **Estado (12 de octubre de 2026).** Toda la lógica está cubierta por 266 tests. Se ha probado conectado a lives ajenos en curso, siempre con el generador de prueba. **No se ha probado todavía:** la IA real (falta `ANTHROPIC_API_KEY`), la voz (no existe aún), el overlay dentro de LIVE Studio ni un live propio.
 
 ---
 
@@ -197,7 +197,7 @@ Los logs de cada arranque quedan en `logs/` con fecha y hora (sección 11). Para
 | `tools/descargar_voz.py` | Baja el modelo de voz a `voz/`. |
 | `tools/muestras_voz.py` | Graba el mismo texto con cada voz disponible y deja `voz/muestras/index.html` para escucharlas y escoger. |
 | `tools/preparar_cartas.py` | Genera las cartas del live en `tarot/img_live/` (WebP) a partir de las originales. |
-| `tests/` | 264 tests. |
+| `tests/` | 266 tests. |
 | `resources/` | Capturas de lives de referencia (no se suben al repo). |
 | `logs/` | Un juego de archivos por live (no se suben al repo). |
 
@@ -586,7 +586,7 @@ Tiempos y topes en el código:
 .venv/bin/python -m pytest -q
 ```
 
-264 tests, unos 25 segundos (cargar el SDK de Anthropic tarda). Cada regla de este documento tiene su test, y los casos sacados de los logs llevan el nombre de la persona o la fecha del live en un comentario. Ningún test llama a TikTok ni a la API de Anthropic: se usan clientes simulados.
+266 tests, unos 25 segundos (cargar el SDK de Anthropic tarda). Cada regla de este documento tiene su test, y los casos sacados de los logs llevan el nombre de la persona o la fecha del live en un comentario. Ningún test llama a TikTok ni a la API de Anthropic: se usan clientes simulados.
 
 ---
 

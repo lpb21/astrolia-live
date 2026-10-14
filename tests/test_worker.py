@@ -1061,3 +1061,26 @@ def test_eventos_astrologicos_solo_con_api_configurada(monkeypatch):
     assert w.salidas[-1].texto == "Hoy tenemos Luna nueva en Libra."
     asyncio.run(w.paso(T0 + timedelta(seconds=20)))                    # ya no hay evento nuevo: sigue el relleno de siempre
     assert w.salidas[-1].texto != "Hoy tenemos Luna nueva en Libra."
+
+
+# ---------- equipo sobrecargado (primer live propio, 13-oct-2026) ----------
+def test_el_recordatorio_de_gratis_no_se_adelanta_a_quien_ya_espera_su_lectura():
+    gen = GenFijo()
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, gen, palabras_por_seg=0, aviso_gratis=timedelta(minutes=5))
+    asyncio.run(w.paso(T0))
+    comentar(c, "21 noviembre del 89, como me irá en el amor?", 400)       # ya tocaba el recordatorio
+    asyncio.run(w.paso(T0 + timedelta(seconds=401)))
+    assert [s.tipo for s in w.salidas if s.tipo in ("lectura", "aviso")][0] == "lectura"
+
+def test_con_la_voz_sin_dar_abasto_no_se_rellena_pero_si_se_lee():
+    class VozLenta:
+        ritmo = 2.1
+        async def sintetizar(self, texto): return b"RIFF", 1.0
+    c = Cola(espera_fecha=None, espera_gratis=CERO)
+    w = Worker(c, GenFijo(), palabras_por_seg=0, relleno=timedelta(seconds=3), voz=VozLenta())
+    asyncio.run(w.paso(T0))
+    assert asyncio.run(w.paso(T0 + timedelta(seconds=30))) is False and w.salidas == []     # ni tips ni saludos
+    comentar(c, "soy Ana 05/05/90 me va a buscar Juan?", 40)
+    asyncio.run(w.paso(T0 + timedelta(seconds=41)))
+    assert w.salidas[-1].tipo == "lectura"

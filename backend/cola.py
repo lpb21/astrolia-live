@@ -556,6 +556,10 @@ class Cola:
                 return item
         return None
 
+    def alguien_listo(self, ahora: datetime) -> bool:
+        """¿Hay algún turno que ya se puede leer? (sin tomarlo)"""
+        return any(self._lista(i, ahora) for i in self.pendientes(ahora))
+
     def tomar_grupo(self, primero: Item, ahora: datetime, maximo: int) -> list[Item]:
         """Otros turnos como `primero` (regalo pequeño, sin pregunta y con el plazo ya vencido) para leerles
         juntos una sola carta. Quedan en "leyendo", igual que si se hubieran tomado uno por uno."""

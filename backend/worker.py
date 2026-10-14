@@ -31,6 +31,7 @@ CARTA_MOMENTO_CADA = timedelta(minutes=3)    # lo más seguido que sale la carta
 CIELO_CADA = timedelta(minutes=10)           # lo más seguido que se cuenta el cielo de hoy
 EVENTO_CADA = timedelta(minutes=15)          # lo más seguido que se cuenta un evento astrológico (astro/eventos.py)
 CIELO_EN_LECTURA_CADA = 3                    # el cielo del día se nombra en una de cada tantas lecturas
+VOZ_LENTA = 0.9                              # segundos de cómputo por segundo de audio desde los que la voz no da abasto
 MAX_GRUPO = 5                                # a cuántas personas se les lee junta la carta corta
 SALUDOS_POR_VEZ = 3    # a cuántas personas se nombra en una bienvenida
 CIERRES_POR_TURNO = 1  # frases de fe por lectura: una sola (con cuatro para elegir, la IA llegó a decir dos)
@@ -102,6 +103,7 @@ class Worker:
         self._cierre_n = 0
         self._usos: dict[tuple, int] = {}     # cuántas veces se ha dicho cada aviso, para rotar sus frases
         self.boost = boost             # None = sin boost de likes
+        self._avisado_lenta = False
         self._menores_avisados: set[str] = set()      # a quién ya se le dijo que el live es para mayores
         self.generador = generador
         self.palabras_por_seg = palabras_por_seg
@@ -284,7 +286,19 @@ class Worker:
         await self._decir(Salida("", "", "", "bienvenida", texto, ahora))
         return True
 
+    def voz_lenta(self) -> bool:
+        """La voz tarda más en generarse de lo que dura: el equipo no da abasto (pasó el 13-oct-2026 con
+        LIVE Studio transmitiendo). Mientras siga así no se rellena ni se saluda: todo va a las lecturas."""
+        lenta = self.voz is not None and getattr(self.voz, "ritmo", 0) > VOZ_LENTA
+        if lenta and not self._avisado_lenta:
+            log.warning(f"[VOZ] lenta: tarda {self.voz.ritmo:.1f} s por cada segundo de audio. El equipo está "
+                        "sobrecargado; se suspenden tips, saludos y avisos hasta que se recupere.")
+        self._avisado_lenta = lenta
+        return lenta
+
     async def _recordar_gratis(self, ahora: datetime) -> bool:
+        if self.cola.alguien_listo(ahora) or self.voz_lenta():
+            return False                      # primero quien ya espera su lectura; el recordatorio va después
         if self.aviso_gratis is None or self.cola.max_gratis <= 0 or not self.en_vivo(ahora):
             return False
         if self._proximo_aviso is None:
@@ -509,8 +523,8 @@ class Worker:
         pidio = await self._completar_fechas(ahora) or pidio
         pidio = await self._avisar_gratis_agotada(ahora) or pidio
         item = self.cola.tomar_siguiente(ahora)
-        if item is None and not self.en_vivo(ahora):      # sin live no se saluda ni se llena el silencio
-            return pidio
+        if item is None and (not self.en_vivo(ahora) or self.voz_lenta()):
+            return pidio                      # sin live, o con la voz sin dar abasto, no se saluda ni se rellena
         if item is None:                      # nadie listo para leer: buen momento para saludar a quien llegó
             dijo = await self._dar_bienvenida(ahora) or pidio
             dijo = dijo or await self._rellenar(ahora)
